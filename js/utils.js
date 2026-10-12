@@ -91,6 +91,26 @@
         }
 
 
+        // Mã khuôn lấy TỰ ĐỘNG từ PM ép nhựa: khi đã kết nối và PM có dữ liệu ngày đó,
+        // mã khuôn theo PM là chuẩn (kể cả để trống = máy không chạy ca đó).
+        // Khi chưa kết nối thì giữ mã khuôn đã lưu trước đây.
+        function qcResolveMold(date, machineId, shiftName, savedMold) {
+            let auto = getRunningMoldFromProd(date, machineId, shiftName);
+            let fromMes = (typeof mesSyncActive !== 'undefined' && mesSyncActive && prodDataMap && !!prodDataMap[date]);
+            if (fromMes) return { mold: auto, fromMes: true };
+            return { mold: savedMold || auto || '', fromMes: false };
+        }
+
+
+        function qcMoldCellHtml(cls, key, moldId, fromMes) {
+            let connected = typeof mesSyncActive !== 'undefined' && mesSyncActive;
+            let ph = connected ? (fromMes ? 'Máy không chạy' : 'PM ép chưa có ngày này') : '⚠️ Chưa kết nối PM ép';
+            let title = connected ? 'Mã khuôn tự động từ phần mềm ép nhựa (không chỉnh tay)' : 'Bấm để kết nối phần mềm ép nhựa và lấy mã khuôn tự động';
+            let click = connected ? '' : ' onclick="if(typeof mesMoKetNoi===\'function\') mesMoKetNoi()" style="cursor:pointer;"';
+            return `<input type="text" readonly tabindex="-1" class="form-control form-control-sm text-center fw-bold text-warning qc-mold-auto ${cls}" value="${escapeHtml(moldId || '')}" placeholder="${ph}" title="${title}" data-key="${key}"${click}>`;
+        }
+
+
         function getDecoCycleByMoldId(moldId) {
             if (!moldId || !moldCatalog) return 30;
             let target = String(moldId).trim().toLowerCase();

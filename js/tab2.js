@@ -248,6 +248,9 @@
                         let key = `${shiftKey}_${timeSlot}`;
                         let rec = dayData[key] || { moldId: autoMold, colorCheck: 'OK', visual: 'OK', dimension: 'OK', mechanical: 'OK', totalCheck: 0, defectCheck: 0, goodCheck: 0, overall: 'OK', note: '' };
                         if (!rec.moldId && autoMold) rec.moldId = autoMold;
+                        // Mã khuôn luôn theo phần mềm ép nhựa (không chọn tay)
+                        let moldSrc = qcResolveMold(date, m, shift, rec.moldId);
+                        if (moldSrc.mold !== (rec.moldId || '')) rec = { ...rec, moldId: moldSrc.mold };
 
                         let total = rec.totalCheck !== undefined ? rec.totalCheck : 0;
                         let defect = rec.defectCheck !== undefined ? rec.defectCheck : 0;
@@ -316,7 +319,7 @@
                             <div>${timeSlot}</div>
                             <div class="text-secondary" style="font-size:8.5px; white-space:nowrap;">${getSlotRangeText(timeSlot)}</div>
                         </td>
-                        <td><input type="text" list="moldOptionsList" class="form-control form-control-sm text-center fw-bold text-warning t2-mold" value="${escapeHtml(rec.moldId || '')}" placeholder="Mã khuôn..." data-key="${key}"></td>
+                        <td>${qcMoldCellHtml('t2-mold', key, rec.moldId, moldSrc.fromMes)}</td>
                         <td class="text-center align-middle" style="padding: 2px !important;">
                             <select class="form-select form-select-sm fw-bold qc-select-compact ${rec.colorCheck === 'NG' ? 'bg-danger text-white' : 'bg-success text-white'} t2-color-chk" onchange="recalcTab2Overall(this)">
                                 <option value="OK" ${rec.colorCheck === 'OK' ? 'selected' : ''}>OK</option>

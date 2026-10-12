@@ -335,6 +335,14 @@
                         }
                     }
 
+                    // Mã khuôn luôn theo phần mềm ép nhựa (không chọn tay)
+                    let moldSrc = qcResolveMold(date, m, shift, rec.moldId);
+                    if (moldSrc.mold !== (rec.moldId || '')) {
+                        rec = { ...rec, moldId: moldSrc.mold, decoCycle: getDecoCycleByMoldId(moldSrc.mold) };
+                        if (!currentRec || !currentRec.machineCycle || currentRec.moldId !== moldSrc.mold) rec.machineCycle = rec.decoCycle;
+                        rec.hmiDetails = getHmiPresetForMold(moldSrc.mold) || getDefaultHmiPresetForMold(moldSrc.mold);
+                    }
+
                     let moldResin = getMoldResinSpecs(rec.moldId || autoMold);
                     if (moldResin.resinType && (!currentRec || !currentRec.resinType)) rec.resinType = moldResin.resinType;
                     if (moldResin.resinColor && (!currentRec || !currentRec.resinColor)) rec.resinColor = moldResin.resinColor;
@@ -408,7 +416,7 @@
                     ${sIdx === 0 ? `<td rowspan="${visibleShifts.length}" class="fw-bold sticky-col">M${m}</td>` : ''}
                     <td><span class="${shift === 'Ca Ngày' ? 'shift-icon-day' : 'shift-icon-night'}">${shiftIcon} ${shift}</span></td>
                     <td><input type="text" class="form-control form-control-sm text-center fw-bold t1-shift-inspector text-info" value="${escapeHtml(shiftInspector)}" placeholder="QC Ca" data-shiftkey="${shiftKey}" data-shift="${shift}" data-machine="${m}" data-workshop="${getMachineWorkshop(m)}" oninput="onTab1InspectorChange('${shift}', this.value, ${m})"></td>
-                    <td><input type="text" list="moldOptionsList" class="form-control form-control-sm text-center fw-bold text-warning t1-mold" value="${escapeHtml(rec.moldId || '')}" placeholder="Mã khuôn..." data-key="${key}" onchange="onTab1MoldChange('${key}', this.value)"></td>
+                    <td>${qcMoldCellHtml('t1-mold', key, rec.moldId, moldSrc.fromMes)}</td>
                     <td>
                         <button type="button" class="btn btn-sm ${moldCheckBadgeClass} py-0 px-2 w-100 t1-btn-moldcheck shadow" onclick="openMoldCheckDetailModal('${key}')" style="font-size:11px;" id="btn_mchk_${key}">
                             🛠️ ${escapeHtml(rec.moldCheckOverall || 'OK')}
