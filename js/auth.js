@@ -35,6 +35,9 @@
                         localStorage.setItem('qc_saved_email', email);
                     } catch (se) { console.warn("Lưu session:", se); }
 
+                    // Dùng luôn tài khoản này để thử kết nối PM ép nhựa (lấy mã khuôn)
+                    if (typeof mesThuDangNhap === 'function') mesThuDangNhap(email, pwd);
+
                     if (errEl) errEl.classList.add('d-none');
                     if (pwdInput) pwdInput.value = '';
                     if (authModalInstance) authModalInstance.hide();
@@ -61,6 +64,7 @@
                     try {
                         localStorage.removeItem('qc_saved_auth');
                     } catch (e) {}
+                    if (typeof mesDangXuat === 'function') mesDangXuat();
                     if (firebase && firebase.auth && isConnected) {
                         firebase.auth().signOut();
                     } else {

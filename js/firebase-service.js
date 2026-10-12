@@ -31,6 +31,7 @@
                             if (statusEl) statusEl.innerHTML = `<span class="badge bg-info text-dark rounded-pill px-3 py-2 small shadow-sm">☁️ QC: ${escapeHtml(user.email)}</span>`;
                             bindRealtimeListeners();
                             subscribeTabRealtime();
+                            if (typeof mesKhoiDong === 'function') mesKhoiDong();
                         } else {
                             currentUser = null;
                             // Kiểm tra phiên đăng nhập đã lưu để tự động duy trì đăng nhập
@@ -67,14 +68,15 @@
         function bindRealtimeListeners() {
             if (!isConnected || !db || isRealtimeBound) return;
             isRealtimeBound = true;
+            // Dữ liệu RTDB cũ chỉ dùng khi chưa kết nối được PM ép nhựa (Firestore haitan1)
             db.ref('mold_prod_v12_mes_clean').on('value', snapshot => {
-                if (snapshot.val()) {
+                if (snapshot.val() && !mesSyncActive) {
                     prodDataMap = snapshot.val();
                     if (isEditMode) { debouncedRenderTab1(); debouncedRenderTab2(); debouncedRenderTab3(); }
                 }
             });
             db.ref('mold_catalog_v12_mes_clean').on('value', snapshot => {
-                if (snapshot.val()) {
+                if (snapshot.val() && !mesCatalogActive) {
                     moldCatalog = snapshot.val();
                     updateMoldDatalist();
                     if (isEditMode) debouncedRenderTab1();
