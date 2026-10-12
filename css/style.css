@@ -653,3 +653,7 @@
 [data-theme="light"] .qc-loai-loi-chip { color: #6d28d9; background: #ede9fe; }
 [data-theme="light"] .qc-4m-label { color: #0369a1; }
 [data-theme="light"] .qc-4m-missing { color: #b45309; }
+
+/* Ô mã khuôn tự động từ PM ép nhựa (chỉ đọc) */
+.qc-mold-auto[readonly] { background-color: rgba(56,189,248,.08) !important; cursor: default; }
+.qc-mold-auto[readonly]::placeholder { color: #f59e0b; opacity: .85; font-weight: 600; font-size: 11px; }
