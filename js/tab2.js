@@ -31,6 +31,9 @@
 
         function syncCurrentTab2InputsToStore() {
             let date = document.getElementById('tab2Date')?.value || getTodayISO();
+            let tbodyEl = document.getElementById('tab2Tbody');
+            // Bảng đang hiển thị ngày khác (vừa đổi ngày) -> không ghi nhầm sang ngày mới
+            if (!tbodyEl || tbodyEl.dataset.renderedDate !== date) return;
             if (!tab2Store[date]) tab2Store[date] = {};
             let dayData = tab2Store[date];
             let before = JSON.parse(JSON.stringify(dayData));
@@ -205,6 +208,7 @@
             let tbody = document.getElementById('tab2Tbody');
             if (!tbody) return;
             tbody.innerHTML = "";
+            tbody.dataset.renderedDate = date; // để chỉ đồng bộ ô nhập về đúng ngày đang hiển thị
 
             renderTab2SlotFilterButtons();
 
@@ -407,6 +411,10 @@
             if (!checkAuthOrAlert()) return;
             let date = document.getElementById('tab2Date').value;
             if (!date) return;
+
+            // 0. Chốt ngay các ô vừa nhập vào bộ nhớ TRƯỚC khi chờ tải cloud, để nếu bảng
+            //    bị vẽ lại trong lúc chờ (dữ liệu realtime / PM ép nhựa cập nhật) thì không mất số đã nhập.
+            syncCurrentTab2InputsToStore();
 
             // 1. TẢI DỮ LIỆU CLOUD MỚI NHẤT ĐỂ BẢO VỆ CHỐNG GHI ĐÈ / MẤT DỮ LIỆU TỪ MÁY KHÁC
             let cloudData = {};

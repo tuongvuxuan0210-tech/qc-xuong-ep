@@ -240,6 +240,8 @@
                 let activeEl = document.activeElement;
                 let tbody = document.getElementById('tab1Tbody');
                 if (tbody && activeEl && tbody.contains(activeEl)) return;
+                // Giữ lại các ô người dùng đã nhập nhưng chưa bấm Lưu trước khi vẽ lại bảng
+                try { if (typeof syncCurrentTab1InputsToStore === 'function') syncCurrentTab1InputsToStore(); } catch (e) { console.warn(e); }
                 renderTab1();
             }, 150);
         }
@@ -251,6 +253,8 @@
                 let activeEl = document.activeElement;
                 let tbody = document.getElementById('tab2Tbody');
                 if (tbody && activeEl && tbody.contains(activeEl)) return;
+                // Giữ lại các ô người dùng đã nhập nhưng chưa bấm Lưu trước khi vẽ lại bảng
+                try { if (typeof syncCurrentTab2InputsToStore === 'function') syncCurrentTab2InputsToStore(); } catch (e) { console.warn(e); }
                 renderTab2();
             }, 150);
         }
