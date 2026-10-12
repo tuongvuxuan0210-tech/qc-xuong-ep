@@ -416,7 +416,7 @@
                     ${sIdx === 0 ? `<td rowspan="${visibleShifts.length}" class="fw-bold sticky-col">M${m}</td>` : ''}
                     <td><span class="${shift === 'Ca Ngày' ? 'shift-icon-day' : 'shift-icon-night'}">${shiftIcon} ${shift}</span></td>
                     <td><input type="text" class="form-control form-control-sm text-center fw-bold t1-shift-inspector text-info" value="${escapeHtml(shiftInspector)}" placeholder="QC Ca" data-shiftkey="${shiftKey}" data-shift="${shift}" data-machine="${m}" data-workshop="${getMachineWorkshop(m)}" oninput="onTab1InspectorChange('${shift}', this.value, ${m})"></td>
-                    <td>${qcMoldCellHtml('t1-mold', key, rec.moldId, moldSrc.fromMes)}</td>
+                    <td>${qcMoldCellHtml('t1-mold', key, rec.moldId, moldSrc)}</td>
                     <td>
                         <button type="button" class="btn btn-sm ${moldCheckBadgeClass} py-0 px-2 w-100 t1-btn-moldcheck shadow" onclick="openMoldCheckDetailModal('${key}')" style="font-size:11px;" id="btn_mchk_${key}">
                             🛠️ ${escapeHtml(rec.moldCheckOverall || 'OK')}

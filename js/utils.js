@@ -91,21 +91,70 @@
         }
 
 
-        // Mã khuôn lấy TỰ ĐỘNG từ PM ép nhựa: khi đã kết nối và PM có dữ liệu ngày đó,
-        // mã khuôn theo PM là chuẩn (kể cả để trống = máy không chạy ca đó).
-        // Khi chưa kết nối thì giữ mã khuôn đã lưu trước đây.
+        // Mã khuôn lấy TỰ ĐỘNG từ PM ép nhựa, theo ĐÚNG quy tắc Tab 5 (Nhật ký sản lượng) của PM:
+        //  1) Máy đã lưu sản lượng ngày đó -> dùng lượt chạy đã lưu (ca không có lượt = máy không chạy).
+        //  2) Máy chưa lưu (Thứ 2 - Thứ 7) -> kế thừa khuôn từ ngày đã lưu gần nhất trước đó
+        //     (Thứ 2 lấy từ Thứ 7). Máy 1-10 chỉ chạy ca ngày; máy 11-21 chạy 2 ca.
+        //  3) Chủ nhật không tự sinh lượt chạy.
+        // Khi chưa kết nối PM thì giữ mã khuôn đã lưu trước đây.
+        let qcPrevProdDateCache = {};
+        function qcPrevSavedProdDate(date) {
+            if (qcPrevProdDateCache.__src !== prodDataMap) qcPrevProdDateCache = { __src: prodDataMap };
+            if (date in qcPrevProdDateCache) return qcPrevProdDateCache[date];
+            let ds = Object.keys(prodDataMap || {}).filter(d => d < date && prodDataMap[d] && Object.keys(prodDataMap[d]).length > 0).sort();
+            return (qcPrevProdDateCache[date] = ds.length ? ds[ds.length - 1] : null);
+        }
+
+        function qcProdRecs(date, machineId) {
+            let day = prodDataMap && prodDataMap[date];
+            if (!day) return [];
+            let recs = day[machineId] || day[String(machineId)];
+            if (!recs) return [];
+            return (Array.isArray(recs) ? recs : Object.values(recs)).filter(r => r && typeof r === 'object');
+        }
+
+        function qcShiftMatch(r, shiftName) {
+            return r.shift === shiftName || (shiftName === 'Ca Ngày' && r.shift === 'Ngày') || (shiftName === 'Ca Đêm' && r.shift === 'Đêm');
+        }
+
         function qcResolveMold(date, machineId, shiftName, savedMold) {
-            let auto = getRunningMoldFromProd(date, machineId, shiftName);
-            let fromMes = (typeof mesSyncActive !== 'undefined' && mesSyncActive && prodDataMap && !!prodDataMap[date]);
-            if (fromMes) return { mold: auto, fromMes: true };
-            return { mold: savedMold || auto || '', fromMes: false };
+            let connected = (typeof mesSyncActive !== 'undefined' && mesSyncActive && prodDataMap);
+            if (!connected) {
+                return { mold: savedMold || getRunningMoldFromProd(date, machineId, shiftName) || '', fromMes: false, inherited: false };
+            }
+            let m = parseInt(machineId) || 0;
+            let saved = qcProdRecs(date, m);
+            if (saved.length > 0) {
+                let f = saved.find(r => qcShiftMatch(r, shiftName));
+                return { mold: (f && f.moldId) || '', fromMes: true, inherited: false };
+            }
+            let parts = String(date).split('-');
+            let isSunday = parts.length === 3 && new Date(+parts[0], +parts[1] - 1, +parts[2]).getDay() === 0;
+            if (isSunday) return { mold: '', fromMes: true, inherited: false };
+            let prev = qcPrevSavedProdDate(date);
+            let prevRecs = prev ? qcProdRecs(prev, m) : [];
+            if (!prevRecs.length) return { mold: '', fromMes: true, inherited: false };
+            let pDay = prevRecs.find(r => r.shift === 'Ngày'), pNight = prevRecs.find(r => r.shift === 'Đêm');
+            let pLast = prevRecs[prevRecs.length - 1];
+            let dayMold = (pDay && pDay.moldId) || (pLast && pLast.moldId) || '';
+            let isNight = String(shiftName).includes('Đêm');
+            if (!isNight) return { mold: dayMold, fromMes: true, inherited: !!dayMold, fromDate: prev };
+            if (m >= 1 && m <= 10) return { mold: '', fromMes: true, inherited: false }; // máy 1-10 chỉ chạy ca ngày
+            let nightMold = (pNight && pNight.moldId) || (pLast && pLast.moldId) || dayMold;
+            return { mold: nightMold, fromMes: true, inherited: !!nightMold, fromDate: prev };
         }
 
 
-        function qcMoldCellHtml(cls, key, moldId, fromMes) {
+        function qcMoldCellHtml(cls, key, moldId, src) {
+            src = src || {};
             let connected = typeof mesSyncActive !== 'undefined' && mesSyncActive;
-            let ph = connected ? (fromMes ? 'Máy không chạy' : 'PM ép chưa có ngày này') : '⚠️ Chưa kết nối PM ép';
+            let ph = connected ? 'Máy không chạy' : '⚠️ Chưa kết nối PM ép';
             let title = connected ? 'Mã khuôn tự động từ phần mềm ép nhựa (không chỉnh tay)' : 'Bấm để kết nối phần mềm ép nhựa và lấy mã khuôn tự động';
+            if (connected && src.inherited) {
+                let p = String(src.fromDate || '').split('-');
+                title = `Tổ ép chưa lưu sản lượng ngày này - mã khuôn kế thừa từ ngày ${p.length === 3 ? p[2] + '/' + p[1] : src.fromDate} (giống phần mềm ép)`;
+                cls += ' qc-mold-inherited';
+            }
             let click = connected ? '' : ' onclick="if(typeof mesMoKetNoi===\'function\') mesMoKetNoi()" style="cursor:pointer;"';
             return `<input type="text" readonly tabindex="-1" class="form-control form-control-sm text-center fw-bold text-warning qc-mold-auto ${cls}" value="${escapeHtml(moldId || '')}" placeholder="${ph}" title="${title}" data-key="${key}"${click}>`;
         }

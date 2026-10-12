@@ -319,7 +319,7 @@
                             <div>${timeSlot}</div>
                             <div class="text-secondary" style="font-size:8.5px; white-space:nowrap;">${getSlotRangeText(timeSlot)}</div>
                         </td>
-                        <td>${qcMoldCellHtml('t2-mold', key, rec.moldId, moldSrc.fromMes)}</td>
+                        <td>${qcMoldCellHtml('t2-mold', key, rec.moldId, moldSrc)}</td>
                         <td class="text-center align-middle" style="padding: 2px !important;">
                             <select class="form-select form-select-sm fw-bold qc-select-compact ${rec.colorCheck === 'NG' ? 'bg-danger text-white' : 'bg-success text-white'} t2-color-chk" onchange="recalcTab2Overall(this)">
                                 <option value="OK" ${rec.colorCheck === 'OK' ? 'selected' : ''}>OK</option>

@@ -657,3 +657,4 @@
 /* Ô mã khuôn tự động từ PM ép nhựa (chỉ đọc) */
 .qc-mold-auto[readonly] { background-color: rgba(56,189,248,.08) !important; cursor: default; }
 .qc-mold-auto[readonly]::placeholder { color: #f59e0b; opacity: .85; font-weight: 600; font-size: 11px; }
+.qc-mold-auto.qc-mold-inherited { font-style: italic; opacity: .85; }
