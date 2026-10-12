@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ Thống Quản Lý Chất Lượng QC - Xưởng Ép Nhựa Hải Tân</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet">
+
+    <!-- Firebase Libraries -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+    <!-- Theme & Giao Diện Ngày / Đêm -->
+    <link rel="stylesheet" href="css/theme.css">
+    <!-- Giao Diện & Định Dạng Toàn Hệ Thống -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="not-logged-in">
+
+    <datalist id="moldOptionsList"></datalist>
+
+    <div class="container-fluid py-2">
+        <!-- HEADER 3D LUXURY -->
+        <div class="main-header mb-3 text-center">
+            <h2 class="m-0 text-uppercase">🔍 QUẢN LÝ CHẤT LƯỢNG SẢN PHẨM QC - MÁY HAITIAN (21 MÁY - 2 PHÂN XƯỞNG)</h2>
+            <p class="m-0 mt-1 opacity-75 small" style="font-size: 11px; color: #bae6fd;">Hệ Thống Quản Trị Chất Lượng
+                Toàn Diện — Tự động đồng bộ thời gian thực Cloud Firebase</p>
+
+            <div class="d-flex justify-content-center align-items-center gap-2 mt-3 flex-wrap">
+                <div id="fb-status"><span class="badge bg-secondary rounded-pill px-3 py-2 small shadow-sm">🔒 Yêu cầu
+                        Đăng nhập</span></div>
+                <button id="btnToggleAuth" class="btn btn-sm btn-3d-amber px-3" onclick="handleAuthToggle()">
+                    🔑 ĐĂNG NHẬP
+                </button>
+                <button class="btn btn-sm btn-3d-primary px-3" onclick="exportBackupJson()" title="Tải toàn bộ dữ liệu máy/khuôn/lỗi thành file JSON để lưu trữ">
+                    📥 Sao Lưu JSON
+                </button>
+                <label class="btn btn-sm btn-3d-primary px-3 m-0" style="cursor:pointer;" title="Nhập file JSON đã sao lưu để khôi phục lại dữ liệu">
+                    📤 Khôi Phục JSON
+                    <input type="file" id="importJsonInput" accept=".json" style="display:none;" onchange="importBackupJson(this)">
+                </label>
+                <button class="btn btn-sm btn-3d-primary px-3" onclick="configZaloWebhook()">
+                    💬 Cài Đặt Zalo Webhook
+                </button>
+                <button class="btn btn-sm btn-3d-ruby px-3" onclick="testZaloAlert()">
+                    🧪 Gửi Thử Tin Nhắn
+                </button>
+                <button id="btnThemeToggle" class="btn btn-sm btn-theme-toggle px-3" onclick="toggleTheme()" title="Chuyển đổi giao diện Ngày (Sáng) / Đêm (Tối)">
+                    🌙 <span class="theme-text">Giao Diện Đêm</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- MÀN HÌNH KHÓA BẢO MẬT 3D -->
+        <div id="loginRequiredAlert" class="card text-center p-5 my-4">
+            <div class="py-4">
+                <div style="font-size: 64px; filter: drop-shadow(0 0 16px #38bdf8);">🔒</div>
+                <h4 class="fw-bold text-danger mt-3" style="letter-spacing: 0.5px;">HỆ THỐNG ĐANG KHÓA TRUY CẬP</h4>
+                <p class="text-light opacity-75 fw-semibold">Vui lòng đăng nhập tài khoản QC để truy xuất và cập nhật dữ
+                    liệu kiểm tra thời gian thực.</p>
+                <button class="btn btn-3d-primary px-4 py-2 mt-2 shadow" onclick="handleAuthToggle()">
+                    🔐 Bấm Vào Đây Để Đăng Nhập
+                </button>
+            </div>
+        </div>
+
+        <!-- NỘI DUNG CHÍNH -->
+        <div id="mainAppContent">
+            <ul class="nav nav-tabs mb-3" id="qcTabs" role="tablist">
+                <li class="nav-item">
+                    <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab1ShiftCheck" type="button"
+                        onclick="renderTab1()">
+                        ⚙️ TAB 1: THÔNG SỐ MÁY (HMI HAITIAN) & KT KHUÔN
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab2PeriodicCheck" type="button"
+                        onclick="renderTab2()">
+                        📋 TAB 2: SP ÉP ĐỊNH KỲ (2H/LẦN)
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab3DefectStats" type="button"
+                        onclick="loadAndRenderTab3()">
+                        🚨 TAB 3: THỐNG KÊ LỖI & CÁCH XỬ LÝ
+                    </button>
+                </li>
+            </ul>
+
+            <div class="tab-content" id="qcTabsContent">
+                <!-- TAB 1 -->
+                <div class="tab-pane fade show active" id="tab1ShiftCheck" role="tabpanel">
+                    <div class="card">
+                        <div
+                            class="qc-sticky-toolbar d-flex flex-wrap justify-content-between align-items-center gap-2">
+                            <div>
+                                <h5 class="fw-bold text-info m-0" id="tab1Title">Thông Số Vận Hành Máy Ép Haitian & Tình
+                                    Trạng Khuôn (Toàn Xưởng M1 - M21)</h5>
+                                <small class="text-light opacity-75" style="font-size: 11px;">Mã khuôn tự đồng bộ từ
+                                    MES. Tên QC điền 1 máy tự đồng bộ cho các máy cùng phân xưởng trong ca (X1: M1-M10, X2: M11-M21).</small>
+                            </div>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <!-- BỘ LỌC PHÂN XƯỞNG TAB 1 -->
+                                <div class="btn-group btn-group-sm rounded-pill p-1 shadow-sm qc-filter-pill-group">
+                                    <button type="button" class="btn btn-sm btn-3d-primary rounded-pill px-3"
+                                        id="btnT1FilterAll" onclick="setTab1WorkshopFilter('ALL')">🌐 Toàn Xưởng</button>
+                                    <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-3"
+                                        id="btnT1FilterX1" onclick="setTab1WorkshopFilter('XUONG1')">🏭 Xưởng 1 (M1-10)</button>
+                                    <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-3"
+                                        id="btnT1FilterX2" onclick="setTab1WorkshopFilter('XUONG2')">🏭 Xưởng 2 (M11-21)</button>
+                                </div>
+                                <!-- BỘ LỌC CA TAB 1 -->
+                                <div class="btn-group btn-group-sm rounded-pill p-1 shadow-sm qc-filter-pill-group">
+                                    <button type="button" class="btn btn-sm btn-3d-primary rounded-pill px-2"
+                                        id="btnT1ShiftAll" onclick="setTab1ShiftFilter('ALL')">☀️🌙 Cả Ca</button>
+                                    <button type="button" class="btn btn-sm btn-outline-warning rounded-pill px-2"
+                                        id="btnT1ShiftDay" onclick="setTab1ShiftFilter('NGAY')">☀️ Ca Ngày</button>
+                                    <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-2"
+                                        id="btnT1ShiftNight" onclick="setTab1ShiftFilter('DEM')">🌙 Ca Đêm</button>
+                                </div>
+                                <input type="date" id="tab1Date"
+                                    class="form-control form-control-sm fw-bold text-center qc-date-input"
+                                    style="width: 140px;" onchange="onDateChangedTab1()">
+                                <button class="btn btn-sm btn-outline-info fw-bold rounded-pill px-3"
+                                    onclick="exportTab1Excel()">📊 Excel</button>
+                                <button class="btn btn-sm btn-3d-emerald px-3" onclick="saveTab1Data()">💾 Lưu Tab
+                                    1</button>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-bordered align-middle text-center" style="min-width: 880px;">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 42px;" class="sticky-col">Máy</th>
+                                        <th style="width: 60px;">Ca</th>
+                                        <th style="width: 80px;">Tên QC</th>
+                                        <th style="width: 135px;">Mã Khuôn (Đồng bộ)</th>
+                                        <th
+                                            style="width: 90px; background: linear-gradient(180deg, #0284c7 0%, #0369a1 100%) !important;">
+                                            KT Khuôn</th>
+                                        <th style="width: 75px;">Loại Nhựa</th>
+                                        <th style="width: 68px;">Màu Nhựa</th>
+                                        <th style="width: 95px; background: linear-gradient(180deg, #0284c7 0%, #0369a1 100%) !important;">Màn Hình HMI</th>
+                                        <th style="width: 54px; background: linear-gradient(180deg, #0284c7 0%, #0369a1 100%) !important;" title="Chu Kỳ Deco Tiêu Chuẩn (giây)">CK Deco</th>
+                                        <th style="width: 54px; background: linear-gradient(180deg, #d97706 0%, #b45309 100%) !important;" title="Chu Kỳ Máy Thực Tế (giây)">CK Máy</th>
+                                        <th style="width: 50px;">KQ</th>
+                                        <th style="width: 75px; background: linear-gradient(180deg, #0284c7 0%, #0369a1 100%) !important;">Ảnh Lỗi</th>
+                                        <th style="width: 100px;">Ghi Chú Lỗi</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tab1Tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 2 -->
+                <div class="tab-pane fade" id="tab2PeriodicCheck" role="tabpanel">
+                    <div class="card">
+                        <div
+                            class="qc-sticky-toolbar d-flex flex-wrap justify-content-between align-items-center gap-2">
+                            <div>
+                                <h5 class="fw-bold text-info m-0" id="tab2Title">Kiểm Tra Sản Phẩm Định Kỳ (2 Giờ / Lần)
+                                    - Toàn Xưởng (M1 - M21)</h5>
+                                <small class="text-light opacity-75" style="font-size: 11px;">Mẫu kiểm tra tiêu chuẩn.
+                                    Tỷ lệ lỗi mẫu > 20% tự động đánh giá NG. Tên QC tự đồng bộ theo phân xưởng trong ca.</small>
+                            </div>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <!-- BỘ LỌC PHÂN XƯỞNG TAB 2 -->
+                                <div class="btn-group btn-group-sm rounded-pill p-1 shadow-sm qc-filter-pill-group">
+                                    <button type="button" class="btn btn-sm btn-3d-primary rounded-pill px-3"
+                                        id="btnT2FilterAll" onclick="setTab2WorkshopFilter('ALL')">🌐 Toàn Xưởng</button>
+                                    <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-3"
+                                        id="btnT2FilterX1" onclick="setTab2WorkshopFilter('XUONG1')">🏭 Xưởng 1 (M1-10)</button>
+                                    <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-3"
+                                        id="btnT2FilterX2" onclick="setTab2WorkshopFilter('XUONG2')">🏭 Xưởng 2 (M11-21)</button>
+                                </div>
+                                <!-- BỘ LỌC CA TAB 2 -->
+                                <div class="btn-group btn-group-sm rounded-pill p-1 shadow-sm qc-filter-pill-group">
+                                    <button type="button" class="btn btn-sm btn-3d-primary rounded-pill px-2"
+                                        id="btnT2ShiftAll" onclick="setTab2ShiftFilter('ALL')">☀️🌙 Cả Ca</button>
+                                    <button type="button" class="btn btn-sm btn-outline-warning rounded-pill px-2"
+                                        id="btnT2ShiftDay" onclick="setTab2ShiftFilter('NGAY')">☀️ Ca Ngày</button>
+                                    <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-2"
+                                        id="btnT2ShiftNight" onclick="setTab2ShiftFilter('DEM')">🌙 Ca Đêm</button>
+                                </div>
+                                <!-- BỘ LỌC KHUNG GIỜ TAB 2 DẠNG LIST (CẠNH BỘ LỌC CA - TIẾT KIỆM DIỆN TÍCH) -->
+                                <div id="tab2SlotSelectWrapper" class="d-flex align-items-center rounded-pill px-2 py-1 shadow-sm qc-slot-wrapper">
+                                    <span class="text-info fw-bold me-1" style="font-size: 11px;">⏰</span>
+                                    <select id="tab2SlotSelect" class="form-select form-select-sm border-0 fw-bold rounded-pill px-1 py-0 bg-transparent"
+                                        style="color: #38bdf8; font-size: 11.5px; width: 175px; cursor: pointer; outline: none; box-shadow: none;"
+                                        onchange="setTab2SlotFilter(this.value)">
+                                        <option value="ALL" class="bg-dark text-white">⏰ Tất Cả Giờ (2h/lần)</option>
+                                    </select>
+                                </div>
+                                <input type="date" id="tab2Date"
+                                    class="form-control form-control-sm fw-bold text-center qc-date-input"
+                                    style="width: 140px;" onchange="onDateChangedTab2()">
+                                <button class="btn btn-sm btn-outline-info fw-bold rounded-pill px-3"
+                                    onclick="exportTab2Excel()">📊 Excel</button>
+                                <button class="btn btn-sm btn-3d-emerald px-3" onclick="saveTab2Data()">💾 Lưu Tab
+                                    2</button>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-bordered align-middle text-center" style="min-width: 890px;">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 40px;" class="sticky-col">Máy</th>
+                                        <th style="width: 42px;">Ca</th>
+                                        <th style="width: 72px;">Tên QC</th>
+                                        <th style="width: 46px;">Giờ</th>
+                                        <th style="width: 120px;">Mã Khuôn</th>
+                                        <th style="width: 56px;" title="Màu Sắc">Màu Sắc</th>
+                                        <th style="width: 60px;" title="Ngoại Quan">Ngoại Quan</th>
+                                        <th style="width: 58px;" title="Kích Thước">Kích Thước</th>
+                                        <th style="width: 56px;" title="Lắp Ráp">Lắp Ráp</th>
+                                        <th
+                                            style="width: 44px; background: linear-gradient(180deg, #0284c7 0%, #0369a1 100%) !important;" title="Số lượng kiểm">
+                                            SL Kiểm</th>
+                                        <th
+                                            style="width: 44px; background: linear-gradient(180deg, #e11d48 0%, #be123c 100%) !important;" title="Số lượng lỗi">
+                                            SL Lỗi</th>
+                                        <th
+                                            style="width: 44px; background: linear-gradient(180deg, #16a34a 0%, #15803d 100%) !important;" title="Số lượng đạt">
+                                            SL Đạt</th>
+                                        <th style="width: 44px;">Đ.Giá</th>
+                                        <th style="width: 62px;">Ảnh Lỗi</th>
+                                        <th style="width: 105px;">Lý Do NG / Ghi Chú</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tab2Tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 3: THỐNG KÊ LỖI & CÁCH XỬ LÝ (XEM THEO KHOẢNG NGÀY) -->
+                <div class="tab-pane fade" id="tab3DefectStats" role="tabpanel">
+                    <div class="card">
+                        <div
+                            class="qc-sticky-toolbar d-flex flex-wrap justify-content-between align-items-center gap-2">
+                            <div>
+                                <h5 class="fw-bold text-danger m-0">🚨 Thống Kê Tổng Hợp Lỗi & Biện Pháp Khắc Phục</h5>
+                                <small class="text-light opacity-75" style="font-size: 11px;">Lấy thông tin từ ghi chú
+                                    lỗi Tab 1 & Tab 2 theo khoảng thời gian tùy chọn.</small>
+                            </div>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <!-- CHỌN KHOẢNG NGÀY -->
+                                <span class="small fw-bold text-info">Từ:</span>
+                                <input type="date" id="tab3FromDate"
+                                    class="form-control form-control-sm fw-bold text-center qc-date-input"
+                                    style="width: 135px;" onchange="loadAndRenderTab3()">
+                                <span class="small fw-bold text-info">Đến:</span>
+                                <input type="date" id="tab3ToDate"
+                                    class="form-control form-control-sm fw-bold text-center qc-date-input"
+                                    style="width: 135px;" onchange="loadAndRenderTab3()">
+
+                                <!-- BỘ LỌC PHÂN XƯỞNG TAB 3 -->
+                                <div class="btn-group btn-group-sm rounded-pill p-1 shadow-sm qc-filter-pill-group">
+                                    <button type="button" class="btn btn-sm btn-3d-primary rounded-pill px-2 py-1"
+                                        id="btnT3WsAll" onclick="setTab3WorkshopFilter('ALL')">🌐 Toàn Xưởng</button>
+                                    <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-2 py-1"
+                                        id="btnT3WsX1" onclick="setTab3WorkshopFilter('XUONG1')">🏭 X1 (M1-10)</button>
+                                    <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-2 py-1"
+                                        id="btnT3WsX2" onclick="setTab3WorkshopFilter('XUONG2')">🏭 X2 (M11-21)</button>
+                                </div>
+
+                                <!-- BỘ LỌC CA TAB 3 -->
+                                <div class="btn-group btn-group-sm rounded-pill p-1 shadow-sm qc-filter-pill-group">
+                                    <button type="button" class="btn btn-sm btn-3d-primary rounded-pill px-2 py-1"
+                                        id="btnT3ShiftAll" onclick="setTab3ShiftFilter('ALL')">☀️🌙 Cả Ca</button>
+                                    <button type="button" class="btn btn-sm btn-outline-warning rounded-pill px-2 py-1"
+                                        id="btnT3ShiftDay" onclick="setTab3ShiftFilter('NGAY')">☀️ Ngày</button>
+                                    <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-2 py-1"
+                                        id="btnT3ShiftNight" onclick="setTab3ShiftFilter('DEM')">🌙 Đêm</button>
+                                </div>
+
+                                <select id="tab3FilterSource"
+                                    class="form-select form-select-sm fw-bold qc-select-source"
+                                    style="width: 140px;" onchange="renderTab3()">
+                                    <option value="ALL">Nguồn: Tất cả</option>
+                                    <option value="TAB1">Chỉ Tab 1 (Khuôn/Máy)</option>
+                                    <option value="TAB2">Chỉ Tab 2 (SP Định Kỳ)</option>
+                                </select>
+                                <button type="button" class="btn btn-sm btn-outline-warning fw-bold rounded-pill px-3 shadow-sm"
+                                    onclick="openGoogleDriveFolderModal()">
+                                    📁 Drive
+                                </button>
+                                <button class="btn btn-sm btn-outline-info fw-bold rounded-pill px-3"
+                                    onclick="exportTab3Excel()">📊 Excel Lỗi</button>
+                                <button class="btn btn-sm btn-3d-emerald px-3" id="btnQuetBoNhoLoi" onclick="qcQuetBoNhoLoi()"
+                                    title="Nạp lịch sử lỗi các ngày trước vào bộ nhớ để nhận diện lỗi lặp lại">🧠 Quét Bộ Nhớ Lỗi</button>
+                            </div>
+                        </div>
+
+                        <!-- KHU VỰC THẺ TỔNG QUAN KPI -->
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-3 col-6">
+                                <div class="kpi-card kpi-card-red">
+                                    <div class="kpi-card-title small">🚨 Tổng Số Lần Kiểm Tra Lỗi</div>
+                                    <div class="kpi-num text-danger" id="kpiTotalDefects">0</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 col-6">
+                                <div class="kpi-card kpi-card-amber">
+                                    <div class="kpi-card-title small">⚙️ Lỗi Tab 1 (Máy/Khuôn)</div>
+                                    <div class="kpi-num text-warning" id="kpiTab1Defects">0</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 col-6">
+                                <div class="kpi-card kpi-card-blue">
+                                    <div class="kpi-card-title small">⏱️ Lỗi Tab 2 (SP Định Kỳ)</div>
+                                    <div class="kpi-num text-info" id="kpiTab2Defects">0</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 col-6">
+                                <div class="kpi-card kpi-card-purple">
+                                    <div class="kpi-card-title small">📦 Tổng Mẫu SP Lỗi Phát Hiện</div>
+                                    <div class="kpi-num text-danger" id="kpiTotalDefectPcs">0</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ==========================================================================
+                             KHU VỰC BIỂU ĐỒ THỐNG KÊ CÁC LOẠI LỖI & SỐ LƯỢNG LỖI TAB 2 THEO NGÀY
+                        ========================================================================== -->
+                        <div class="card chart-3d-card mb-4 p-3" id="tab2ChartsSection">
+                            <!-- THANH TIÊU ĐỀ BIỂU ĐỒ TAB 2 (TỰ ĐỘNG ĐỒNG BỘ THEO NGÀY, XƯỞNG VÀ CA TRÊN ĐẦU) -->
+                            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 pb-2 border-bottom border-secondary border-opacity-25">
+                                <div>
+                                    <h6 class="fw-bold text-info m-0 d-flex align-items-center gap-2">
+                                        <span class="fs-5">📊</span>
+                                        <span>BÁO CÁO & BIỂU ĐỒ THỐNG KÊ LỖI SẢN PHẨM ĐỊNH KỲ (TAB 2)</span>
+                                    </h6>
+                                    <small class="text-light opacity-75" style="font-size: 11px;">Tự động tổng hợp theo ngày, phân xưởng và ca đã chọn ở thanh công cụ phía trên.</small>
+                                </div>
+                                <div class="d-flex align-items-center gap-2 flex-wrap">
+                                    <span class="badge bg-primary bg-opacity-25 text-info border border-info border-opacity-50 rounded-pill px-3 py-1 fw-bold" id="t2ChartDateBadge">📅 Ngày: -</span>
+                                    <span class="badge bg-dark border border-secondary text-warning rounded-pill px-3 py-1 fw-bold" id="t2ChartScopeBadge">🌐 Toàn xưởng | ☀️🌙 Cả Ca</span>
+                                </div>
+                            </div>
+
+                            <!-- MINI KPI CARDS CHO TAB 2 THEO NGÀY -->
+                            <div class="row g-2 mb-3">
+                                <div class="col-lg-3 col-6">
+                                    <div class="p-2 rounded-3 text-center h-100 qc-mini-kpi qc-mini-kpi-blue">
+                                        <div class="small text-info fw-bold" style="font-size: 11px;">📦 TỔNG MẪU KIỂM TRA</div>
+                                        <div class="fs-5 fw-bold qc-kpi-val mt-1" id="t2KpiTotalChecked">0 <span class="small fw-normal opacity-75" style="font-size: 11px;">SP</span></div>
+                                    </div>
+                                </div>
+                                <div class="col-lg-3 col-6">
+                                    <div class="p-2 rounded-3 text-center h-100 qc-mini-kpi qc-mini-kpi-red">
+                                        <div class="small text-danger fw-bold" style="font-size: 11px;">❌ TỔNG SẢN PHẨM LỖI</div>
+                                        <div class="fs-5 fw-bold text-danger mt-1" id="t2KpiTotalDefects">0 <span class="small fw-normal opacity-75" style="font-size: 11px;">SP</span></div>
+                                    </div>
+                                </div>
+                                <div class="col-lg-3 col-6">
+                                    <div class="p-2 rounded-3 text-center h-100 qc-mini-kpi qc-mini-kpi-amber">
+                                        <div class="small text-warning fw-bold" style="font-size: 11px;">📉 TỶ LỆ LỖI CHUNG</div>
+                                        <div class="fs-5 fw-bold text-warning mt-1" id="t2KpiDefectRatio">0.0%</div>
+                                    </div>
+                                </div>
+                                <div class="col-lg-3 col-6">
+                                    <div class="p-2 rounded-3 text-center h-100 qc-mini-kpi qc-mini-kpi-green">
+                                        <div class="small text-success fw-bold" style="font-size: 11px;">🏭 MÁY LỖI NHIỀU NHẤT</div>
+                                        <div class="fs-6 fw-bold qc-kpi-val mt-1 text-truncate" id="t2KpiTopMachine">Không có</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- THÔNG BÁO KHI TOÀN BỘ SẢN PHẨM ĐẠT (KHÔNG CÓ LỖI) -->
+                            <div id="tab2ChartsEmptyAlert" class="alert alert-success d-none py-2 px-3 text-center mb-3 fw-bold rounded-3" style="background: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.4); color: #6ee7b7;">
+                                🎉 Không phát hiện lỗi sản phẩm nào ở Tab 2 trong ngày đã chọn! Toàn bộ sản phẩm kiểm tra đều ĐẠT tiêu chuẩn (OK 100%).
+                            </div>
+
+                            <!-- HÀNG 1: BIỂU ĐỒ CƠ CẤU CÁC LOẠI LỖI & TOP LÝ DO LỖI CHI TIẾT TỪ GHI CHÚ -->
+                            <div class="row g-3 mb-3">
+                                <div class="col-lg-5 col-12">
+                                    <div class="chart-box-sub h-100">
+                                        <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary border-opacity-25">
+                                            <div class="fw-bold text-info small">🎨 CƠ CẤU 6 LOẠI LỖI TAB 2</div>
+                                            <span class="badge bg-secondary bg-opacity-50 text-light small py-1 px-2" style="font-size: 10px;">6 Loại Lỗi</span>
+                                        </div>
+                                        <div style="position: relative; height: 250px; width: 100%;">
+                                            <canvas id="chartTab2Categories"></canvas>
+                                        </div>
+                                        <div id="chartTab2CategoriesLegend" class="mt-2 d-flex flex-wrap justify-content-center gap-2 small" style="font-size: 11px;"></div>
+                                    </div>
+                                </div>
+                                <div class="col-lg-7 col-12">
+                                    <div class="chart-box-sub h-100">
+                                        <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary border-opacity-25">
+                                            <div class="fw-bold text-warning small">📝 THỐNG KÊ ĐẦY ĐỦ CÁC NGUYÊN NHÂN / LÝ DO LỖI (TỪ GHI CHÚ)</div>
+                                            <span class="badge bg-danger bg-opacity-25 text-danger border border-danger border-opacity-25 small py-1 px-2" id="t2ReasonCountBadge">0 Loại Lỗi</span>
+                                        </div>
+                                        <div id="chartTab2ReasonsWrapper" style="position: relative; height: 260px; width: 100%;">
+                                            <canvas id="chartTab2Reasons"></canvas>
+                                        </div>
+                                        <!-- Bảng / Danh sách chi tiết đầy đủ tất cả các lý do lỗi -->
+                                        <div id="chartTab2ReasonsDetail" class="mt-2 pt-2 border-top border-secondary border-opacity-25" style="max-height: 180px; overflow-y: auto;"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- HÀNG 2: BIỂU ĐỒ SỐ LƯỢNG SẢN PHẨM LỖI THEO TỪNG MÁY (M1 - M21) -->
+                            <div class="row g-3 mb-3">
+                                <div class="col-12">
+                                    <div class="chart-box-sub">
+                                        <div class="d-flex flex-wrap justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary border-opacity-25 gap-2">
+                                            <div class="fw-bold text-info small">🏭 SỐ LƯỢNG SẢN PHẨM LỖI THEO TỪNG MÁY ÉP (M1 - M21)</div>
+                                            <div class="d-flex align-items-center gap-3 small" style="font-size: 11px;">
+                                                <span class="d-inline-flex align-items-center gap-1">
+                                                    <span style="display:inline-block; width:12px; height:12px; background:linear-gradient(180deg, #38bdf8, #0284c7); border-radius:3px;"></span>
+                                                    <span>Xưởng 1 (M1 - M10)</span>
+                                                </span>
+                                                <span class="d-inline-flex align-items-center gap-1">
+                                                    <span style="display:inline-block; width:12px; height:12px; background:linear-gradient(180deg, #a855f7, #7c3aed); border-radius:3px;"></span>
+                                                    <span>Xưởng 2 (M11 - M21)</span>
+                                                </span>
+                                                <span class="d-inline-flex align-items-center gap-1">
+                                                    <span style="display:inline-block; width:12px; height:12px; background:linear-gradient(180deg, #f43f5e, #be123c); border-radius:3px;"></span>
+                                                    <span class="fw-bold text-danger">Có Lỗi Phát Sinh</span>
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div style="position: relative; height: 260px; width: 100%;">
+                                            <canvas id="chartTab2Machines"></canvas>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- HÀNG 3: BIỂU ĐỒ DIỄN BIẾN SỐ LƯỢNG LỖI THEO KHUNG GIỜ (2H/LẦN) & CA -->
+                            <div class="row g-3">
+                                <div class="col-12">
+                                    <div class="chart-box-sub">
+                                        <div class="d-flex flex-wrap justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary border-opacity-25 gap-2">
+                                            <div class="fw-bold text-warning small">⏰ DIỄN BIẾN SỐ LƯỢNG LỖI THEO KHUNG GIỜ KIỂM TRA (2H/LẦN)</div>
+                                            <div class="d-flex align-items-center gap-3 small" style="font-size: 11px;">
+                                                <span class="d-inline-flex align-items-center gap-1">
+                                                    <span style="display:inline-block; width:12px; height:12px; background: #fbbf24; border-radius:3px;"></span>
+                                                    <span>☀️ Ca Ngày (08:00 - 18:00)</span>
+                                                </span>
+                                                <span class="d-inline-flex align-items-center gap-1">
+                                                    <span style="display:inline-block; width:12px; height:12px; background: #38bdf8; border-radius:3px;"></span>
+                                                    <span>🌙 Ca Đêm (20:00 - 06:00)</span>
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div style="position: relative; height: 230px; width: 100%;">
+                                            <canvas id="chartTab2TimeSlots"></canvas>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- BẢNG DỮ LIỆU THỐNG KÊ LỖI TAB 3 (CÓ CỘT NGÀY & GHI CHÚ TỪ TAB 1, TAB 2) -->
+                        <div class="table-responsive">
+                            <table class="table table-bordered align-middle text-center" style="min-width: 1500px;">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 45px;" class="sticky-col">STT</th>
+                                        <th
+                                            style="width: 95px; background: linear-gradient(180deg, #0284c7 0%, #0369a1 100%) !important;">
+                                            Ngày Phát Sinh</th>
+                                        <th style="width: 80px;">Nguồn Lỗi</th>
+                                        <th style="width: 55px;">Máy</th>
+                                        <th style="width: 85px;">Ca / Giờ</th>
+                                        <th style="width: 85px;">QC Ghi Nhận</th>
+                                        <th style="width: 120px;">Mã Khuôn</th>
+                                        <th style="width: 170px;">Hạng Mục / Loại Lỗi Nổi Bật</th>
+                                        <th
+                                            style="width: 75px; background: linear-gradient(180deg, #e11d48 0%, #be123c 100%) !important;">
+                                            SL Mẫu Lỗi</th>
+                                        <th
+                                            style="width: 220px; background: linear-gradient(180deg, #b91c1c 0%, #991b1b 100%) !important;">
+                                            📌 Mô Tả / Lý Do Lỗi (Ô Ghi Chú Tab 1 & 2)</th>
+                                        <th
+                                            style="width: 210px; background: linear-gradient(180deg, #7c3aed 0%, #6d28d9 100%) !important;">
+                                            🧠 Lần Đầu / Lặp Lại (Bộ Nhớ Lỗi)</th>
+                                        <th
+                                            style="width: 300px; background: linear-gradient(180deg, #0284c7 0%, #0369a1 100%) !important;">
+                                            🛠️ ĐỐI SÁCH XỬ LÝ 4M (Người · Thiết bị · Vật tư · Thao tác)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tab3Tbody">
+                                    <tr>
+                                        <td colspan="12" class="text-center text-muted py-4">Đang tải danh sách thống kê
+                                            lỗi...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL ĐĂNG NHẬP 3D -->
+    <div class="modal fade" id="authModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content rounded-4 text-white"
+                style="background: linear-gradient(145deg, #1e293b, #0f172a); border: 1px solid #38bdf8; box-shadow: 0 16px 40px rgba(0,0,0,0.8);">
+                <div class="modal-header py-2"
+                    style="background: linear-gradient(90deg, #0284c7, #0369a1); border-bottom: 1px solid rgba(255,255,255,0.15);">
+                    <h6 class="modal-title fw-bold m-0 text-white">🔐 Đăng Nhập Tài Khoản QC</h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body text-center p-3">
+                    <input type="email" id="qcEmailInput"
+                        class="form-control text-center fw-bold bg-dark text-white border-secondary mb-2"
+                        value="qc@haitan.com" placeholder="Email...">
+                    <input type="password" id="qcPasswordInput"
+                        class="form-control text-center fw-bold bg-dark text-info border-info mb-2"
+                        placeholder="Mật khẩu..." onkeyup="if(event.key==='Enter') loginFirebase()">
+                    <div id="authErrorMsg" class="text-danger small fw-bold d-none">⚠️ Sai email hoặc mật khẩu!</div>
+                </div>
+                <div class="modal-footer py-2 justify-content-center border-0">
+                    <button type="button" class="btn btn-sm btn-secondary rounded-pill px-3"
+                        data-bs-dismiss="modal">Hủy</button>
+                    <button type="button" class="btn btn-sm btn-3d-emerald px-4" id="btnLoginSubmit"
+                        onclick="loginFirebase()">Đăng Nhập</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL KIỂM TRA KHUÔN 3D -->
+    <div class="modal fade" id="moldCheckDetailModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
+            <div class="modal-content rounded-4 text-white"
+                style="background: linear-gradient(145deg, #1e293b, #0f172a); border: 1px solid #38bdf8; box-shadow: 0 16px 40px rgba(0,0,0,0.8);">
+                <div class="modal-header py-2"
+                    style="background: linear-gradient(90deg, #0284c7, #0369a1); border-bottom: 1px solid rgba(255,255,255,0.15);">
+                    <h6 class="modal-title fw-bold m-0 text-white" id="moldCheckModalTitle">🛠️ CHI TIẾT KIỂM TRA HẠNG
+                        MỤC KHUÔN</h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-3" style="background-color: #0f172a;">
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-sm align-middle">
+                            <thead>
+                                <tr>
+                                    <th style="width: 22%;">Hạng mục kiểm tra</th>
+                                    <th>Nội dung chi tiết cần kiểm tra</th>
+                                    <th style="width: 14%;">Đánh giá</th>
+                                    <th style="width: 25%;">Ghi chú</th>
+                                </tr>
+                            </thead>
+                            <tbody style="font-size:12px;">
+                                <tr>
+                                    <td class="fw-bold text-info">1. Cơ khí & Bề mặt</td>
+                                    <td class="text-light">
+                                        • Lòng khuôn (Cavity/Core): Không trầy xước, dính nhựa, rỉ sét, bẩn.<br>
+                                        • Dẫn hướng: Guide pins/ống dẫn (không trầy, khô dầu, tiếng kêu).<br>
+                                        • Sliders/Lifters: Trơn tru, không bavia, công tắc hành trình OK.
+                                    </td>
+                                    <td class="text-center">
+                                        <select
+                                            class="form-select form-select-sm fw-bold bg-success text-white mchk-item"
+                                            id="mchk_mech" onchange="updateMoldCheckOverallUI()">
+                                            <option value="OK">OK</option>
+                                            <option value="NG">NG</option>
+                                        </select>
+                                    </td>
+                                    <td><input type="text" class="form-control form-control-sm" id="mchk_mech_note"
+                                            placeholder="Ghi chú..."></td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-bold text-info">2. Hệ thống làm mát</td>
+                                    <td class="text-light">
+                                        • Đường ống & khớp nối: Không rò rỉ, gãy khớp nối nhanh, nghẹt.<br>
+                                        • Nhiệt độ khuôn: Lưu thông đều, đạt nhiệt độ kỹ thuật.
+                                    </td>
+                                    <td class="text-center">
+                                        <select
+                                            class="form-select form-select-sm fw-bold bg-success text-white mchk-item"
+                                            id="mchk_cool" onchange="updateMoldCheckOverallUI()">
+                                            <option value="OK">OK</option>
+                                            <option value="NG">NG</option>
+                                        </select>
+                                    </td>
+                                    <td><input type="text" class="form-control form-control-sm" id="mchk_cool_note"
+                                            placeholder="Ghi chú..."></td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-bold text-info">3. Hệ thống đẩy SP</td>
+                                    <td class="text-light">
+                                        • Ty đẩy (Ejector pins): Không cong vênh, gãy, kẹt.<br>
+                                        • Hành trình: Bàn lừa tiến/lùi về sát vị trí ban đầu (về 0).<br>
+                                        • Bôi trơn: Mỡ chịu nhiệt đầy đủ.
+                                    </td>
+                                    <td class="text-center">
+                                        <select
+                                            class="form-select form-select-sm fw-bold bg-success text-white mchk-item"
+                                            id="mchk_eject" onchange="updateMoldCheckOverallUI()">
+                                            <option value="OK">OK</option>
+                                            <option value="NG">NG</option>
+                                        </select>
+                                    </td>
+                                    <td><input type="text" class="form-control form-control-sm" id="mchk_eject_note"
+                                            placeholder="Ghi chú..."></td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-bold text-info">4. Hệ thống rót nhựa</td>
+                                    <td class="text-light">
+                                        • Bạc cuống phun (Sprue bushing): Không mòn, xước, bám nhựa cũ.<br>
+                                        • Hot runner/Kênh dẫn: Gia nhiệt, đầu heater, cảm biến nhiệt đủ/ổn định.
+                                    </td>
+                                    <td class="text-center">
+                                        <select
+                                            class="form-select form-select-sm fw-bold bg-success text-white mchk-item"
+                                            id="mchk_runner" onchange="updateMoldCheckOverallUI()">
+                                            <option value="OK">OK</option>
+                                            <option value="NG">NG</option>
+                                        </select>
+                                    </td>
+                                    <td><input type="text" class="form-control form-control-sm" id="mchk_runner_note"
+                                            placeholder="Ghi chú..."></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mt-3 px-1">
+                        <span class="fw-bold" style="font-size: 13px;">Tổng thể Kiểm Tra Khuôn: <span
+                                id="moldCheckOverallBadge" class="badge bg-success fs-6 shadow">OK</span></span>
+                    </div>
+                </div>
+                <div class="modal-footer py-2 border-0">
+                    <button type="button" class="btn btn-sm btn-secondary rounded-pill px-3"
+                        data-bs-dismiss="modal">Đóng</button>
+                    <button type="button" class="btn btn-sm btn-3d-primary px-4" onclick="saveMoldCheckDetailModal()">✅
+                        Lưu Kết Quả</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL ẢNH MÀN HÌNH HMI THEO MÃ KHUÔN (LƯU TRỮ GOOGLE DRIVE) -->
+    <div class="modal fade" id="hmiModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content rounded-4 text-white shadow-lg"
+                style="background: linear-gradient(145deg, #1e293b, #090e17); border: 2px solid #38bdf8; box-shadow: 0 20px 50px rgba(0,0,0,0.9);">
+                <div class="modal-header py-2 px-3"
+                    style="background: linear-gradient(90deg, #0284c7, #0369a1); border-bottom: 1px solid rgba(255,255,255,0.15);">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="fs-5">🖥️</span>
+                        <h6 class="modal-title fw-bold m-0 text-white" id="hmiModalTitle">ẢNH MÀN HÌNH CÀI ĐẶT HMI MÁY ÉP</h6>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-3" style="background-color:#0b1329;">
+                    <!-- Thanh trạng thái khuôn & máy -->
+                    <div class="p-2 px-3 rounded mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2"
+                        style="background: rgba(30, 41, 59, 0.9); border: 1px solid rgba(56, 189, 248, 0.3);">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="text-secondary small fw-bold">MÃ KHUÔN:</span>
+                            <span id="hmiMoldTag" class="badge bg-warning text-dark fw-bold fs-6 px-3 py-1 shadow-sm">-</span>
+                            <span id="hmiCurrentKeyBadge" class="badge bg-primary px-2 py-1 small">M1</span>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-dark border border-info text-info small" id="hmiDriveFolderBadge">
+                                📁 Thư mục Drive: <b>Màn hình HMI</b>
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Khu vực hiển thị ảnh HMI -->
+                    <div id="hmiPhotoContainer" class="text-center p-3 rounded position-relative"
+                        style="background: #020617; border: 1px dashed rgba(56, 189, 248, 0.4); min-height: 340px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                        
+                        <!-- Trạng thái chưa có ảnh -->
+                        <div id="hmiEmptyState" style="display: none;">
+                            <div class="fs-1 mb-2 opacity-75">📷</div>
+                            <h6 class="fw-bold text-light mb-1">Chưa có ảnh màn hình HMI cho mã khuôn này</h6>
+                            <p class="small text-secondary mb-3" style="max-width: 440px;">
+                                Chụp ảnh hoặc tải lên màn hình cài đặt HMI máy ép thực tế. Ảnh sẽ được tự động xử lý tăng nét HD & nén tối ưu (chuẩn công nghệ ~100KB, đọc rõ nét từng thông số màn hình, tải tức thì) và đồng bộ vào thư mục <b>"Màn hình HMI"</b> trên Google Drive.
+                            </p>
+                            <label class="btn btn-3d-primary rounded-pill px-4 py-2 fw-bold shadow">
+                                📸 Chụp / Tải Ảnh HMI Lên
+                                <input type="file" id="hmiFileInputEmpty" accept="image/*" capture="environment" style="display: none;" onchange="handleHmiImageUpload(this)">
+                            </label>
+                        </div>
+
+                        <!-- Trạng thái đã có ảnh -->
+                        <div id="hmiImagePreviewWrapper" style="display: none; width: 100%;">
+                            <div class="position-relative d-inline-block w-100 text-center" style="max-height: 65vh; overflow: auto; border-radius: 12px;">
+                                <img id="hmiImageElement" src="" class="img-fluid rounded border border-info shadow-lg" 
+                                    style="max-height: 60vh; max-width: 100%; object-fit: contain; cursor: zoom-in; transition: transform 0.2s ease;"
+                                    onclick="toggleHmiImageZoom()" title="Bấm để phóng to / thu nhỏ">
+                            </div>
+                            
+                            <!-- Thông tin ảnh & nút thao tác nhanh -->
+                            <div class="mt-2 d-flex justify-content-between align-items-center flex-wrap gap-2 pt-2 border-top border-secondary">
+                                <div class="text-start">
+                                    <div class="small text-info fw-bold" id="hmiImageMetaInfo">📄 HMI_MOLD.jpg</div>
+                                    <div class="text-secondary" style="font-size: 11px;" id="hmiImageTimeInfo">Cập nhật: --</div>
+                                </div>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <button type="button" class="btn btn-sm btn-outline-light rounded-pill px-3 fw-bold" onclick="toggleHmiImageZoom()" id="btnHmiZoom">
+                                        🔍 Phóng to
+                                    </button>
+                                    <a id="hmiDriveFileLink" href="#" target="_blank" class="btn btn-sm btn-outline-warning rounded-pill px-3 fw-bold" style="display:none;">
+                                        🔗 Mở trên Drive
+                                    </a>
+                                    <label class="btn btn-sm btn-outline-info rounded-pill px-3 fw-bold m-0" style="cursor: pointer;">
+                                        📸 Đổi ảnh mới
+                                        <input type="file" id="hmiFileInputReplace" accept="image/*" capture="environment" style="display: none;" onchange="handleHmiImageUpload(this)">
+                                    </label>
+                                    <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-2 fw-bold" onclick="deleteHmiImageForMold()" title="Xóa ảnh HMI này">
+                                        🗑️
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Spinner khi đang nén / upload -->
+                        <div id="hmiUploadLoading" class="position-absolute w-100 h-100 top-0 start-0 d-flex flex-column align-items-center justify-content-center"
+                            style="display: none !important; background: rgba(2, 6, 23, 0.85); backdrop-filter: blur(4px); z-index: 10; border-radius: 12px;">
+                            <div class="spinner-border text-info mb-2" role="status"></div>
+                            <div class="fw-bold text-info" id="hmiUploadLoadingText">Đang nén ảnh sắc nét & tải lên Google Drive...</div>
+                            <div class="small text-secondary">Thư mục đích: Google Drive / Màn hình HMI</div>
+                        </div>
+                    </div>
+
+                    <!-- Ghi chú tiện ích -->
+                    <div class="mt-2 p-2 rounded small text-light opacity-75 d-flex justify-content-between align-items-center flex-wrap gap-1"
+                        style="background: rgba(15, 23, 42, 0.6); font-size: 11.5px;">
+                        <span>💡 <i>Ảnh được ghi nhớ vĩnh viễn theo Mã Khuôn. Bất cứ khi nào chọn lại mã khuôn này sẽ tự động tải lại ảnh để xem.</i></span>
+                        <a href="https://drive.google.com/drive/folders/1m8rzMVgucC2DT9o_2lYGjBb5tuwrX8no?usp=drive_link" target="_blank" class="text-warning text-decoration-none fw-bold" id="hmiDriveFolderDirectLink">
+                            📁 Xem Thư Mục Drive ↗
+                        </a>
+                    </div>
+                </div>
+                <div class="modal-footer py-2 justify-content-between border-0">
+                    <span class="small text-secondary" id="hmiMoldNoticeStatus">Mã khuôn: -</span>
+                    <button type="button" class="btn btn-sm btn-secondary rounded-pill px-4" data-bs-dismiss="modal">Đóng</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL XEM & QUẢN LÝ THƯ MỤC GOOGLE DRIVE CÓ NÚT THOÁT / ĐÓNG RÕ RÀNG -->
+    <div class="modal fade" id="googleDriveFolderModal" tabindex="-1" aria-labelledby="googleDriveFolderModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content bg-dark text-white border-warning shadow-lg" style="border-width: 2px;">
+                <div class="modal-header border-secondary py-2 justify-content-between">
+                    <h6 class="modal-title fw-bold text-warning" id="googleDriveFolderModalLabel">
+                        📁 QUẢN LÝ THƯ MỤC GOOGLE DRIVE & HMI
+                    </h6>
+                    <button type="button" class="btn btn-sm btn-danger rounded-pill px-3 py-1 fw-bold" data-bs-dismiss="modal" aria-label="Close">
+                        ✖ ĐÓNG
+                    </button>
+                </div>
+                <div class="modal-body p-3">
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6 col-12">
+                            <div class="p-3 rounded border border-info h-100 text-center" style="background: rgba(15, 23, 42, 0.9);">
+                                <div class="fs-2 mb-1">📂</div>
+                                <h6 class="fw-bold text-info mb-1">Thư Mục Ảnh Lỗi QC Hải Thiên</h6>
+                                <div class="small text-light opacity-75 mb-2" style="font-size:11px;">ID: <code>1m8rzMVgucC2DT9o_2lYGjBb5tuwrX8no</code></div>
+                                <a href="https://drive.google.com/drive/folders/1m8rzMVgucC2DT9o_2lYGjBb5tuwrX8no?usp=drive_link" target="_blank" class="btn btn-sm btn-warning fw-bold px-3 py-1 rounded-pill shadow">
+                                    🔗 Mở Google Drive
+                                </a>
+                            </div>
+                        </div>
+                        <div class="col-md-6 col-12">
+                            <div class="p-3 rounded border border-primary h-100 text-center" style="background: rgba(15, 23, 42, 0.9);">
+                                <div class="fs-2 mb-1">🖥️</div>
+                                <h6 class="fw-bold text-primary mb-1">Thư Mục Màn Hình HMI (Khuôn)</h6>
+                                <div class="small text-light opacity-75 mb-2" style="font-size:11px;">Tự động tạo bên trong thư mục gốc</div>
+                                <a href="https://drive.google.com/drive/folders/1m8rzMVgucC2DT9o_2lYGjBb5tuwrX8no?usp=drive_link" target="_blank" class="btn btn-sm btn-outline-info fw-bold px-3 py-1 rounded-pill shadow">
+                                    📁 Xem Thư Mục HMI
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center bg-black p-2 rounded border border-secondary mb-2">
+                        <span class="small text-light opacity-75" style="font-size: 11px;">Webhook Đồng Bộ Drive & Zalo:</span>
+                        <div class="d-flex gap-1">
+                            <button type="button" class="btn btn-xs btn-outline-info rounded-pill px-2 py-0" onclick="testGoogleDriveConnection()" style="font-size: 11px;">🧪 Thử Gửi Ảnh Test</button>
+                            <button type="button" class="btn btn-xs btn-outline-warning rounded-pill px-2 py-0" onclick="configZaloWebhook()" style="font-size: 11px;">⚙️ Đổi Webhook URL</button>
+                        </div>
+                    </div>
+
+                    <div class="accordion" id="gasScriptAccordion">
+                        <div class="accordion-item bg-dark border-secondary">
+                            <h2 class="accordion-header" id="headingGas">
+                                <button class="accordion-button collapsed bg-secondary text-white py-1 small fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseGas">
+                                    📜 Mã nguồn Google Apps Script (Hỗ trợ tự động tạo thư mục 'Màn hình HMI')
+                                </button>
+                            </h2>
+                            <div id="collapseGas" class="accordion-collapse collapse" data-bs-parent="#gasScriptAccordion">
+                                <div class="accordion-body p-2 bg-black text-start">
+                                    <pre class="m-0 text-info" style="font-size: 10.5px; max-height: 180px; overflow: auto;"><code>function doPost(e) {
+  try {
+    var data = JSON.parse(e.postData.contents);
+    if (data.action === 'upload_to_drive') {
+      var rootFolderId = data.folderId || '1m8rzMVgucC2DT9o_2lYGjBb5tuwrX8no';
+      var rootFolder = DriveApp.getFolderById(rootFolderId);
+      var targetFolder = rootFolder;
+      
+      // Tự động tạo thư mục con (ví dụ: 'Màn hình HMI') nếu có
+      var subfolderName = data.folderName || data.subfolder || data.targetFolder;
+      if (subfolderName) {
+        var folders = rootFolder.getFoldersByName(subfolderName);
+        if (folders.hasNext()) {
+          targetFolder = folders.next();
+        } else {
+          targetFolder = rootFolder.createFolder(subfolderName);
+        }
+      }
+      
+      var decoded = Utilities.base64Decode(data.fileData);
+      var blob = Utilities.newBlob(decoded, data.mimeType || 'image/jpeg', data.fileName);
+      var file = targetFolder.createFile(blob);
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      
+      var res = {
+        status: 'success',
+        fileId: file.getId(),
+        fileUrl: file.getUrl(),
+        folderId: targetFolder.getId(),
+        folderUrl: targetFolder.getUrl()
+      };
+      return ContentService.createTextOutput(JSON.stringify(res)).setMimeType(ContentService.MimeType.JSON);
+    }
+  } catch(err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: err.toString() })).setMimeType(ContentService.MimeType.JSON);
+  }
+}</code></pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <p class="small text-light opacity-75 mt-2 mb-0" style="font-size: 11.5px;">
+                        Toàn bộ ảnh chụp màn hình HMI & ảnh mẫu lỗi được chuyển tới Google Drive qua Webhook Google Apps Script bảo mật.
+                    </p>
+                </div>
+                <div class="modal-footer border-secondary py-2 justify-content-end">
+                    <button type="button" class="btn btn-sm btn-secondary rounded-pill px-4 fw-bold shadow" data-bs-dismiss="modal">❌ ĐÓNG / QUAY LẠI</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5 Bundle JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Hệ Thống QC - Các Modules JavaScript Chuẩn Dev Chuyên Nghiệp -->
+    <script src="js/config.js"></script>
+    <script src="js/state.js"></script>
+    <script src="js/theme.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/firebase-service.js"></script>
+    <script src="js/zalo.js"></script>
+    <script src="js/image-service.js"></script>
+    <script src="js/tab1.js"></script>
+    <script src="js/tab2.js"></script>
+    <script src="js/doi-sach-4m.js"></script>
+    <script src="js/tab3.js"></script>
+    <script src="js/export-service.js"></script>
+    <script src="js/app.js"></script>
+</body>
+
+</html>

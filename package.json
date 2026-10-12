@@ -1,0 +1,8 @@
+{
+  "name": "qc-xuong-ep",
+  "version": "1.0.0",
+  "description": "He thong quan ly chat luong QC - Xuong Ep Nhua Hai Tan",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" }
+}

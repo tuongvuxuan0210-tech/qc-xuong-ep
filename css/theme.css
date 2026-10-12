@@ -1,0 +1,883 @@
+/* ==========================================================================
+   HỆ THỐNG GIAO DIỆN NGÀY & ĐÊM (DAY & NIGHT THEME SYSTEM)
+   Tối ưu hóa chuẩn Enterprise Dashboard - Xưởng Ép Nhựa Hải Tân
+========================================================================== */
+
+/* ==========================================================================
+   1. DARK MODE (GIAO DIỆN ĐÊM - 3D LUXURY OCEAN SAPPHIRE & TITANIUM GLOSS)
+========================================================================== */
+:root, [data-theme="dark"] {
+    --bg-gradient: radial-gradient(circle at 50% 0%, #1e3a8a 0%, #0f172a 45%, #020617 100%);
+    --card-3d-bg: linear-gradient(135deg, rgba(30, 41, 59, 0.85) 0%, rgba(15, 23, 42, 0.95) 100%);
+    --glass-border: 1px solid rgba(56, 189, 248, 0.25);
+    --glass-glow: 0 16px 36px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+    --cyan-glow: #38bdf8;
+    --gold-accent: #f59e0b;
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --header-bg: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+    --header-border: #38bdf8;
+    --header-title-gradient: linear-gradient(90deg, #ffffff, #7dd3fc, #38bdf8);
+    --table-bg: #0d1527;
+    --table-stripe: #0a0f1d;
+    --table-border: #1e293b;
+    --table-header-bg: #0f172a;
+    --table-header-text: #7dd3fc;
+    --table-header-border: #334155;
+    --input-bg: #050b14;
+    --input-border: #1e3a5f;
+    --input-text: #ffffff;
+    --input-focus-bg: #020617;
+    --sticky-bg: #0b1329;
+    --sticky-col-bg: #070d19;
+    --sticky-col-border: #38bdf8;
+    --sticky-col-text: #38bdf8;
+    --chart-card-bg: #0b1329;
+    --chart-box-bg: #0f1c3f;
+    --modal-bg: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    --tab-inactive-bg: rgba(15, 23, 42, 0.6);
+    --tab-inactive-color: #94a3b8;
+    --tab-inactive-border: rgba(255, 255, 255, 0.08);
+}
+
+/* Điểm nhấn thẻ KPI trong Giao diện Đêm */
+.kpi-card.kpi-card-red { border-left: 5px solid #f43f5e !important; }
+.kpi-card.kpi-card-amber { border-left: 5px solid #f59e0b !important; }
+.kpi-card.kpi-card-blue { border-left: 5px solid #38bdf8 !important; }
+.kpi-card.kpi-card-purple { border-left: 5px solid #c084fc !important; }
+.kpi-card .kpi-card-title { color: #94a3b8; }
+
+/* ==========================================================================
+   2. LIGHT MODE (GIAO DIỆN NGÀY TONE ẤM IPHONE - DỊU MẮT, BẢNG & KPI NỔI BẬT)
+   Lấy cảm hứng từ chế độ Apple True Tone / Night Shift / Warm Paper
+========================================================================== */
+[data-theme="light"] {
+    /* Nền tone ấm ngả vàng dịu mắt giống chế độ iPhone True Tone / Night Shift */
+    --bg-gradient: linear-gradient(180deg, #f7f3e8 0%, #f4eee1 50%, #efe7d7 100%);
+    --card-3d-bg: #fffdfa;
+    --glass-border: 1px solid #ded5c6;
+    --glass-glow: 0 4px 20px rgba(68, 64, 60, 0.08), 0 1px 3px rgba(68, 64, 60, 0.04);
+    --cyan-glow: #0284c7;
+    --gold-accent: #d97706;
+    --text-primary: #1c1917;
+    --text-secondary: #57534e;
+    --text-muted: #78716c;
+    --header-bg: #fffdf9;
+    --header-border: #0284c7;
+    --header-title-gradient: linear-gradient(90deg, #0369a1, #0284c7, #0284c7);
+    --table-bg: #fffdfa;
+    --table-stripe: #f8f3e8;
+    --table-border: #ded5c6;
+    --table-header-bg: #0f2744;
+    --table-header-text: #ffffff;
+    --table-header-border: #334e68;
+    --input-bg: #fffdfa;
+    --input-border: #ded5c6;
+    --input-text: #1c1917;
+    --input-focus-bg: #ffffff;
+    --sticky-bg: #fffdfa;
+    --sticky-col-bg: #f5eee2;
+    --sticky-col-border: #0284c7;
+    --sticky-col-text: #0284c7;
+    --chart-card-bg: #fffdfa;
+    --chart-box-bg: #f8f3e8;
+    --modal-bg: #fffdfa;
+    --tab-inactive-bg: #fffdfa;
+    --tab-inactive-color: #57534e;
+    --tab-inactive-border: #ded5c6;
+}
+
+/* Chuyển đổi mượt mà giữa các chế độ giao diện */
+body, .card, .main-header, .table, .table td, .table th, .table input, .table select,
+.qc-sticky-toolbar, .table-responsive, .kpi-card, .chart-3d-card, .chart-box-sub,
+.modal-content, .nav-tabs .nav-link {
+    transition: background-color 0.2s ease, background 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* ==========================================================================
+   3. NÚT CHUYỂN ĐỔI GIAO DIỆN NGÀY / ĐÊM
+========================================================================== */
+.btn-theme-toggle {
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    color: #38bdf8 !important;
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+    border-radius: 30px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-theme-toggle:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(56, 189, 248, 0.5);
+    border-color: #38bdf8;
+    color: #ffffff !important;
+}
+
+[data-theme="light"] .btn-theme-toggle {
+    background: linear-gradient(135deg, #fffdfa 0%, #f5eee2 100%);
+    color: #0284c7 !important;
+    border: 2px solid #0284c7;
+    box-shadow: 0 4px 14px rgba(2, 132, 199, 0.2);
+}
+
+[data-theme="light"] .btn-theme-toggle:hover {
+    background: linear-gradient(135deg, #fef3c7 0%, #faebd2 100%);
+    color: #b45309 !important;
+    border-color: #d97706;
+    box-shadow: 0 6px 18px rgba(217, 119, 6, 0.3);
+}
+
+/* ==========================================================================
+   4. TOÀN DIỆN GIAO DIỆN NGÀY (LIGHT MODE OVERRIDES - TONE ẤM IPHONE)
+========================================================================= */
+
+/* Nền và màu chữ cơ bản - Tone ấm ngả vàng như chế độ True Tone / Night Shift iPhone */
+[data-theme="light"] body {
+    background: var(--bg-gradient);
+    color: #1c1917;
+}
+
+/* Header chính */
+[data-theme="light"] .main-header {
+    background: #fffdf9 !important;
+    border-bottom: 3.5px solid #0284c7 !important;
+    box-shadow: 0 6px 24px rgba(68, 64, 60, 0.08) !important;
+}
+
+[data-theme="light"] .main-header h2 {
+    background: linear-gradient(90deg, #0369a1, #0284c7, #0369a1) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    font-weight: 800 !important;
+}
+
+[data-theme="light"] .main-header p {
+    color: #0369a1 !important;
+    font-weight: 700 !important;
+}
+
+/* Màn hình khóa bảo mật */
+[data-theme="light"] #loginRequiredAlert {
+    background: #fffdfa !important;
+    border: 2px solid #ded5c6 !important;
+    box-shadow: 0 10px 30px rgba(68, 64, 60, 0.08) !important;
+}
+
+[data-theme="light"] #loginRequiredAlert p {
+    color: #57534e !important;
+}
+
+/* Thẻ card chính - Tone ngả vàng dịu mắt, chống lóa */
+[data-theme="light"] .card {
+    background: #fffdfa !important;
+    border: 1.5px solid #ded5c6 !important;
+    box-shadow: 0 6px 24px rgba(68, 64, 60, 0.07), 0 1px 3px rgba(68, 64, 60, 0.04) !important;
+    color: #1c1917 !important;
+}
+
+/* Thanh Tabs */
+[data-theme="light"] .nav-tabs .nav-link {
+    background: #fffdfa !important;
+    color: #57534e !important;
+    border: 1.5px solid #ded5c6 !important;
+    box-shadow: 0 2px 8px rgba(68, 64, 60, 0.05) !important;
+    font-weight: 700;
+}
+
+[data-theme="light"] .nav-tabs .nav-link:hover {
+    color: #0284c7 !important;
+    border-color: #93c5fd !important;
+    background: #f0f9ff !important;
+}
+
+[data-theme="light"] .nav-tabs .nav-link.active {
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 16px rgba(2, 132, 199, 0.4) !important;
+    border-color: transparent !important;
+}
+
+/* Thanh công cụ Sticky Toolbar */
+[data-theme="light"] .qc-sticky-toolbar {
+    background-color: #f9f5ed !important;
+    border-bottom: 2.5px solid #0284c7 !important;
+    box-shadow: 0 3px 10px rgba(68, 64, 60, 0.06) !important;
+    color: #1c1917 !important;
+}
+
+[data-theme="light"] .qc-sticky-toolbar h5 {
+    font-weight: 800 !important;
+}
+
+[data-theme="light"] .qc-sticky-toolbar small,
+[data-theme="light"] .qc-sticky-toolbar .text-light {
+    color: #57534e !important;
+    font-weight: 600 !important;
+    opacity: 1 !important;
+}
+
+/* Khối nút bấm lọc xưởng và ca */
+[data-theme="light"] .qc-filter-pill-group,
+[data-theme="light"] .btn-group {
+    background: #efe7d7 !important;
+    border: 1px solid #ded5c6 !important;
+    box-shadow: 0 1px 3px rgba(68, 64, 60, 0.06) !important;
+}
+
+[data-theme="light"] .btn-group .btn-outline-info {
+    color: #0369a1 !important;
+    border-color: transparent !important;
+    font-weight: 700 !important;
+}
+
+[data-theme="light"] .btn-group .btn-outline-info:hover {
+    background: #e0f2fe !important;
+    color: #0284c7 !important;
+}
+
+[data-theme="light"] .btn-group .btn-outline-warning {
+    color: #b45309 !important;
+    border-color: transparent !important;
+    font-weight: 700 !important;
+}
+
+[data-theme="light"] .btn-group .btn-outline-warning:hover {
+    background: #fef3c7 !important;
+    color: #b45309 !important;
+}
+
+[data-theme="light"] .btn-3d-primary {
+    background: linear-gradient(180deg, #0284c7 0%, #0369a1 100%) !important;
+    color: #ffffff !important;
+    border: 1px solid #0284c7 !important;
+    box-shadow: 0 3px 10px rgba(2, 132, 199, 0.35) !important;
+}
+
+/* Các nút outline chung */
+[data-theme="light"] .btn-outline-info {
+    color: #0284c7 !important;
+    border-color: #0284c7 !important;
+    background: #fffdfa !important;
+    font-weight: 700 !important;
+}
+
+[data-theme="light"] .btn-outline-info:hover {
+    background: #e0f2fe !important;
+    color: #0369a1 !important;
+}
+
+[data-theme="light"] .btn-outline-warning {
+    color: #b45309 !important;
+    border-color: #d97706 !important;
+    background: #fffdfa !important;
+    font-weight: 700 !important;
+}
+
+[data-theme="light"] .btn-outline-warning:hover {
+    background: #fef3c7 !important;
+    color: #b45309 !important;
+}
+
+[data-theme="light"] .btn-outline-light {
+    color: #292524 !important;
+    border-color: #ded5c6 !important;
+    background: #fffdfa !important;
+    font-weight: 700 !important;
+}
+
+[data-theme="light"] .btn-outline-light:hover {
+    background: #f5eee2 !important;
+    color: #1c1917 !important;
+}
+
+/* Ô nhập liệu Form (Input, Select, Date, Khung giờ) */
+[data-theme="light"] input.form-control,
+[data-theme="light"] select.form-select,
+[data-theme="light"] .qc-date-input,
+[data-theme="light"] .qc-select-source,
+[data-theme="light"] .form-control.bg-dark,
+[data-theme="light"] .form-select.bg-dark {
+    background-color: #fffdfa !important;
+    color: #1c1917 !important;
+    border: 1.5px solid #ded5c6 !important;
+    box-shadow: inset 0 1px 3px rgba(68, 64, 60, 0.06) !important;
+    font-weight: 700 !important;
+}
+
+[data-theme="light"] input.form-control:focus,
+[data-theme="light"] select.form-select:focus,
+[data-theme="light"] .qc-date-input:focus,
+[data-theme="light"] .qc-select-source:focus {
+    background-color: #ffffff !important;
+    border-color: #0284c7 !important;
+    box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.25) !important;
+    color: #1c1917 !important;
+}
+
+[data-theme="light"] .qc-slot-wrapper,
+[data-theme="light"] #tab2SlotSelectWrapper {
+    background: #fffdfa !important;
+    border: 1.5px solid #ded5c6 !important;
+    box-shadow: 0 1px 4px rgba(68, 64, 60, 0.06) !important;
+}
+
+[data-theme="light"] #tab2SlotSelectWrapper span {
+    color: #0284c7 !important;
+}
+
+[data-theme="light"] #tab2SlotSelect {
+    color: #0369a1 !important;
+}
+
+[data-theme="light"] #tab2SlotSelect option {
+    background-color: #fffdfa !important;
+    color: #1c1917 !important;
+}
+
+[data-theme="light"] #tab3FilterSource {
+    background-color: #fffdfa !important;
+    color: #0369a1 !important;
+    border-color: #ded5c6 !important;
+}
+
+[data-theme="light"] #tab3FilterSource option {
+    background-color: #fffdfa !important;
+    color: #1c1917 !important;
+}
+
+/* ==========================================================================
+   5. BẢNG DỮ LIỆU QC VÀ TIÊU ĐỀ BẢNG NỔI BẬT ĐẬM NÉT
+========================================================================== */
+[data-theme="light"] .table-responsive {
+    background-color: #fffdfa !important;
+    border: 1.5px solid #ded5c6 !important;
+    box-shadow: 0 4px 16px rgba(68, 64, 60, 0.05) !important;
+}
+
+[data-theme="light"] .table {
+    color: #1c1917 !important;
+}
+
+/* Tiêu đề bảng thead th: Tông Xanh Navy đậm sang trọng, tương phản cực cao, rõ từng chữ */
+[data-theme="light"] .table thead th {
+    background: linear-gradient(180deg, #1e3a5f 0%, #0f2744 100%) !important;
+    color: #ffffff !important;
+    border: 1px solid #334e68 !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5) !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.5px !important;
+    box-shadow: inset 0 -2px 0 #0284c7, 0 3px 6px rgba(68, 64, 60, 0.15) !important;
+}
+
+/* Các cột tiêu đề có màu nổi bật đặc biệt trong Tab 3 */
+[data-theme="light"] .table thead th[style*="#0284c7"] {
+    background: linear-gradient(180deg, #0284c7 0%, #0369a1 100%) !important;
+    color: #ffffff !important;
+}
+
+[data-theme="light"] .table thead th[style*="#e11d48"],
+[data-theme="light"] .table thead th[style*="#b91c1c"] {
+    background: linear-gradient(180deg, #b91c1c 0%, #991b1b 100%) !important;
+    color: #ffffff !important;
+}
+
+[data-theme="light"] .table thead th[style*="#d97706"] {
+    background: linear-gradient(180deg, #d97706 0%, #b45309 100%) !important;
+    color: #ffffff !important;
+}
+
+/* Thân bảng */
+[data-theme="light"] .table td {
+    background-color: #fffdfa !important;
+    color: #1c1917 !important;
+    border: 1px solid #ded5c6 !important;
+}
+
+[data-theme="light"] .table tbody tr:nth-child(even) td {
+    background-color: #f8f3e8 !important;
+}
+
+[data-theme="light"] .table tbody tr:hover td {
+    background-color: #faebd2 !important;
+}
+
+/* Cột dính cố định Sticky MÁY (M1-M21) và STT */
+[data-theme="light"] .sticky-col {
+    background-color: #f5eee2 !important;
+    border-right: 2.5px solid #0284c7 !important;
+    color: #0284c7 !important;
+    font-weight: 800 !important;
+}
+
+[data-theme="light"] .table thead th.sticky-col {
+    background: #0a192f !important;
+    color: #38bdf8 !important;
+    border-right: 2.5px solid #38bdf8 !important;
+}
+
+/* Cột Chu kỳ Deco & Chu kỳ Máy */
+[data-theme="light"] .qc-cycle-deco {
+    background: #e0f2fe !important;
+    color: #0369a1 !important;
+    border: 2px solid #0284c7 !important;
+    font-weight: 800 !important;
+}
+
+[data-theme="light"] .qc-cycle-machine {
+    background: #fff8e6 !important;
+    color: #b45309 !important;
+    border: 2px solid #f59e0b !important;
+    font-weight: 800 !important;
+}
+
+[data-theme="light"] .qc-cycle-machine:focus {
+    background: #ffffff !important;
+    color: #b45309 !important;
+    border-color: #d97706 !important;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25) !important;
+}
+
+/* Compact Select & Số lượng trong bảng Tab 2 */
+[data-theme="light"] .qc-select-compact {
+    border: 1.5px solid #ded5c6 !important;
+}
+
+[data-theme="light"] .t2-good {
+    color: #15803d !important;
+    border-color: #86efac !important;
+    background-color: #f0fdf4 !important;
+}
+
+[data-theme="light"] .t2-defect {
+    color: #b91c1c !important;
+    border-color: #fca5a5 !important;
+    background-color: #fef2f2 !important;
+}
+
+[data-theme="light"] .t2-total {
+    color: #0284c7 !important;
+    border-color: #93c5fd !important;
+    background-color: #f0f9ff !important;
+}
+
+[data-theme="light"] .t1-mold,
+[data-theme="light"] .t2-mold {
+    color: #b45309 !important;
+    font-weight: 800 !important;
+}
+
+[data-theme="light"] .t1-shift-inspector,
+[data-theme="light"] .t2-shift-inspector {
+    color: #0369a1 !important;
+    font-weight: 800 !important;
+}
+
+/* ==========================================================================
+   6. PHẦN 3: THỐNG KÊ LỖI, THẺ KPI & CÁCH XỬ LÝ SIÊU NỔI BẬT
+========================================================================== */
+
+/* 4 Thẻ KPI Tổng Quan Ở Đầu Tab 3 - Phối màu rực rỡ, nổi bật trên nền Slate */
+[data-theme="light"] .kpi-card {
+    border-radius: 16px !important;
+    padding: 16px 18px !important;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+[data-theme="light"] .kpi-card:hover {
+    transform: translateY(-3px) scale(1.01) !important;
+}
+
+/* Tiêu đề chung cho thẻ KPI */
+[data-theme="light"] .kpi-card .kpi-card-title,
+[data-theme="light"] .kpi-card .text-light,
+[data-theme="light"] .kpi-card small {
+    font-weight: 800 !important;
+    font-size: 11.5px !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.5px !important;
+    margin-bottom: 6px !important;
+    display: block;
+}
+
+/* Thẻ 1: Tổng số lần lỗi (Sắc Đỏ San Hô - Hồng Đào Cực Kỳ Nổi Bật) */
+[data-theme="light"] .kpi-card.kpi-card-red,
+[data-theme="light"] .kpi-card:has(#kpiTotalDefects) {
+    background: linear-gradient(145deg, #fff1f2 0%, #fee2e2 50%, #fecaca 100%) !important;
+    border: 1.5px solid #f87171 !important;
+    border-left: 6px solid #dc2626 !important;
+    box-shadow: 0 6px 20px rgba(220, 38, 38, 0.16), 0 2px 6px rgba(220, 38, 38, 0.08) !important;
+}
+[data-theme="light"] .kpi-card.kpi-card-red:hover,
+[data-theme="light"] .kpi-card:has(#kpiTotalDefects):hover {
+    box-shadow: 0 10px 25px rgba(220, 38, 38, 0.22) !important;
+}
+[data-theme="light"] .kpi-card.kpi-card-red .kpi-card-title,
+[data-theme="light"] .kpi-card:has(#kpiTotalDefects) .kpi-card-title,
+[data-theme="light"] .kpi-card:has(#kpiTotalDefects) .text-light,
+[data-theme="light"] .kpi-card:has(#kpiTotalDefects) small {
+    color: #991b1b !important;
+}
+[data-theme="light"] #kpiTotalDefects {
+    color: #b91c1c !important;
+    font-size: 2.25rem !important;
+    font-weight: 900 !important;
+    text-shadow: 0 1px 2px rgba(185, 28, 28, 0.15) !important;
+}
+
+/* Thẻ 2: Lỗi Tab 1 Khuôn/Máy (Sắc Vàng Hổ Phách Sang Trọng, Ấm Áp) */
+[data-theme="light"] .kpi-card.kpi-card-amber,
+[data-theme="light"] .kpi-card:has(#kpiTab1Defects) {
+    background: linear-gradient(145deg, #fffbeb 0%, #fef3c7 50%, #fde68a 100%) !important;
+    border: 1.5px solid #fcd34d !important;
+    border-left: 6px solid #d97706 !important;
+    box-shadow: 0 6px 20px rgba(217, 119, 6, 0.16), 0 2px 6px rgba(217, 119, 6, 0.08) !important;
+}
+[data-theme="light"] .kpi-card.kpi-card-amber:hover,
+[data-theme="light"] .kpi-card:has(#kpiTab1Defects):hover {
+    box-shadow: 0 10px 25px rgba(217, 119, 6, 0.22) !important;
+}
+[data-theme="light"] .kpi-card.kpi-card-amber .kpi-card-title,
+[data-theme="light"] .kpi-card:has(#kpiTab1Defects) .kpi-card-title,
+[data-theme="light"] .kpi-card:has(#kpiTab1Defects) .text-light,
+[data-theme="light"] .kpi-card:has(#kpiTab1Defects) small {
+    color: #92400e !important;
+}
+[data-theme="light"] #kpiTab1Defects {
+    color: #b45309 !important;
+    font-size: 2.25rem !important;
+    font-weight: 900 !important;
+    text-shadow: 0 1px 2px rgba(180, 83, 9, 0.15) !important;
+}
+
+/* Thẻ 3: Lỗi Tab 2 SP Định Kỳ (Sắc Xanh Ngọc Sapphire Tươi Mát) */
+[data-theme="light"] .kpi-card.kpi-card-blue,
+[data-theme="light"] .kpi-card:has(#kpiTab2Defects) {
+    background: linear-gradient(145deg, #f0f9ff 0%, #e0f2fe 50%, #bae6fd 100%) !important;
+    border: 1.5px solid #7dd3fc !important;
+    border-left: 6px solid #0284c7 !important;
+    box-shadow: 0 6px 20px rgba(2, 132, 199, 0.16), 0 2px 6px rgba(2, 132, 199, 0.08) !important;
+}
+[data-theme="light"] .kpi-card.kpi-card-blue:hover,
+[data-theme="light"] .kpi-card:has(#kpiTab2Defects):hover {
+    box-shadow: 0 10px 25px rgba(2, 132, 199, 0.22) !important;
+}
+[data-theme="light"] .kpi-card.kpi-card-blue .kpi-card-title,
+[data-theme="light"] .kpi-card:has(#kpiTab2Defects) .kpi-card-title,
+[data-theme="light"] .kpi-card:has(#kpiTab2Defects) .text-light,
+[data-theme="light"] .kpi-card:has(#kpiTab2Defects) small {
+    color: #0369a1 !important;
+}
+[data-theme="light"] #kpiTab2Defects {
+    color: #0284c7 !important;
+    font-size: 2.25rem !important;
+    font-weight: 900 !important;
+    text-shadow: 0 1px 2px rgba(2, 132, 199, 0.15) !important;
+}
+
+/* Thẻ 4: Tổng mẫu SP lỗi phát hiện (Sắc Tím Lavender Vương Giả) */
+[data-theme="light"] .kpi-card.kpi-card-purple,
+[data-theme="light"] .kpi-card:has(#kpiTotalDefectPcs) {
+    background: linear-gradient(145deg, #faf5ff 0%, #f3e8ff 50%, #e9d5ff 100%) !important;
+    border: 1.5px solid #d8b4fe !important;
+    border-left: 6px solid #9333ea !important;
+    box-shadow: 0 6px 20px rgba(147, 51, 234, 0.16), 0 2px 6px rgba(147, 51, 234, 0.08) !important;
+}
+[data-theme="light"] .kpi-card.kpi-card-purple:hover,
+[data-theme="light"] .kpi-card:has(#kpiTotalDefectPcs):hover {
+    box-shadow: 0 10px 25px rgba(147, 51, 234, 0.22) !important;
+}
+[data-theme="light"] .kpi-card.kpi-card-purple .kpi-card-title,
+[data-theme="light"] .kpi-card:has(#kpiTotalDefectPcs) .kpi-card-title,
+[data-theme="light"] .kpi-card:has(#kpiTotalDefectPcs) .text-light,
+[data-theme="light"] .kpi-card:has(#kpiTotalDefectPcs) small {
+    color: #6b21a8 !important;
+}
+[data-theme="light"] #kpiTotalDefectPcs {
+    color: #7e22ce !important;
+    font-size: 2.25rem !important;
+    font-weight: 900 !important;
+    text-shadow: 0 1px 2px rgba(126, 34, 206, 0.15) !important;
+}
+
+/* KHỐI BIỂU ĐỒ TAB 2 TẠI TAB 3 */
+[data-theme="light"] #tab2ChartsSection {
+    background: #fffdfa !important;
+    border: 2px solid #ded5c6 !important;
+    border-radius: 18px !important;
+    box-shadow: 0 8px 30px rgba(68, 64, 60, 0.08) !important;
+}
+
+[data-theme="light"] #tab2ChartsSection h6 {
+    color: #1c1917 !important;
+    font-size: 1.15rem !important;
+    font-weight: 800 !important;
+}
+
+[data-theme="light"] #t2ChartDateBadge {
+    background-color: #e0f2fe !important;
+    color: #0369a1 !important;
+    border: 1.5px solid #7dd3fc !important;
+    font-size: 12px !important;
+    font-weight: 800 !important;
+}
+
+[data-theme="light"] #t2ChartScopeBadge {
+    background-color: #f5eee2 !important;
+    color: #44403c !important;
+    border: 1.5px solid #ded5c6 !important;
+    font-size: 12px !important;
+    font-weight: 800 !important;
+}
+
+/* 4 Thẻ Mini KPI của Biểu đồ (Bên Trong Khối Báo Cáo Biểu Đồ) */
+[data-theme="light"] .qc-mini-kpi {
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+[data-theme="light"] .qc-mini-kpi:hover {
+    transform: translateY(-2px) !important;
+}
+
+[data-theme="light"] .qc-mini-kpi-blue {
+    background: linear-gradient(145deg, #f0f9ff 0%, #e0f2fe 100%) !important;
+    border: 1.5px solid #7dd3fc !important;
+    border-left: 5px solid #0284c7 !important;
+    box-shadow: 0 4px 14px rgba(2, 132, 199, 0.12) !important;
+}
+[data-theme="light"] .qc-mini-kpi-blue .small,
+[data-theme="light"] .qc-mini-kpi-blue .text-info {
+    color: #0369a1 !important;
+    font-weight: 800 !important;
+}
+[data-theme="light"] #t2KpiTotalChecked {
+    color: #0284c7 !important;
+    font-size: 1.35rem !important;
+    font-weight: 900 !important;
+}
+
+[data-theme="light"] .qc-mini-kpi-red {
+    background: linear-gradient(145deg, #fff1f2 0%, #fee2e2 100%) !important;
+    border: 1.5px solid #fca5a5 !important;
+    border-left: 5px solid #dc2626 !important;
+    box-shadow: 0 4px 14px rgba(220, 38, 38, 0.12) !important;
+}
+[data-theme="light"] .qc-mini-kpi-red .small,
+[data-theme="light"] .qc-mini-kpi-red .text-danger {
+    color: #991b1b !important;
+    font-weight: 800 !important;
+}
+[data-theme="light"] #t2KpiTotalDefects {
+    color: #b91c1c !important;
+    font-size: 1.35rem !important;
+    font-weight: 900 !important;
+}
+
+[data-theme="light"] .qc-mini-kpi-amber {
+    background: linear-gradient(145deg, #fffbeb 0%, #fef3c7 100%) !important;
+    border: 1.5px solid #fde68a !important;
+    border-left: 5px solid #d97706 !important;
+    box-shadow: 0 4px 14px rgba(217, 119, 6, 0.12) !important;
+}
+[data-theme="light"] .qc-mini-kpi-amber .small,
+[data-theme="light"] .qc-mini-kpi-amber .text-warning {
+    color: #92400e !important;
+    font-weight: 800 !important;
+}
+[data-theme="light"] #t2KpiDefectRatio {
+    color: #b45309 !important;
+    font-size: 1.35rem !important;
+    font-weight: 900 !important;
+}
+
+[data-theme="light"] .qc-mini-kpi-green {
+    background: linear-gradient(145deg, #f0fdf4 0%, #dcfce7 100%) !important;
+    border: 1.5px solid #86efac !important;
+    border-left: 5px solid #16a34a !important;
+    box-shadow: 0 4px 14px rgba(22, 163, 74, 0.12) !important;
+}
+[data-theme="light"] .qc-mini-kpi-green .small,
+[data-theme="light"] .qc-mini-kpi-green .text-success {
+    color: #166534 !important;
+    font-weight: 800 !important;
+}
+[data-theme="light"] #t2KpiTopMachine {
+    color: #15803d !important;
+    font-size: 1.2rem !important;
+    font-weight: 900 !important;
+}
+
+/* Khung phụ chứa biểu đồ */
+[data-theme="light"] .chart-box-sub {
+    background: #f8f3e8 !important;
+    border: 1.5px solid #ded5c6 !important;
+    border-radius: 14px !important;
+    box-shadow: 0 3px 10px rgba(68, 64, 60, 0.05) !important;
+}
+
+[data-theme="light"] .chart-box-sub .text-info {
+    color: #0f2744 !important;
+    font-weight: 800 !important;
+}
+
+[data-theme="light"] .chart-box-sub .text-warning {
+    color: #78350f !important;
+    font-weight: 800 !important;
+}
+
+/* Bảng danh sách chi tiết lý do lỗi trong Tab 3 */
+[data-theme="light"] #chartTab2ReasonsDetail {
+    border-top: 2px solid #ded5c6 !important;
+}
+
+[data-theme="light"] #chartTab2ReasonsDetail .text-white {
+    color: #1c1917 !important;
+    font-weight: 700 !important;
+}
+
+[data-theme="light"] #chartTab2ReasonsDetail .badge.bg-dark {
+    background-color: #fee2e2 !important;
+    color: #b91c1c !important;
+    border: 1px solid #fca5a5 !important;
+    font-weight: 800 !important;
+}
+
+/* BẢNG DỮ LIỆU VÀ Ô NHẬP BIỆN PHÁP KHẮC PHỤC (CÁCH XỬ LÝ) */
+[data-theme="light"] .t3-desc-cell {
+    background-color: #fff1f2 !important;
+    color: #991b1b !important;
+    border-left: 3px solid #ef4444 !important;
+    font-weight: 700 !important;
+}
+
+[data-theme="light"] .t3-action-input {
+    background-color: #fffdfa !important;
+    color: #1c1917 !important;
+    border: 2px solid #0284c7 !important;
+    border-radius: 8px !important;
+    font-weight: 700 !important;
+    box-shadow: inset 0 1px 3px rgba(68, 64, 60, 0.08) !important;
+}
+
+[data-theme="light"] .t3-action-input:focus {
+    border-color: #16a34a !important;
+    background-color: #f0fdf4 !important;
+    color: #15803d !important;
+    box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.25) !important;
+}
+
+[data-theme="light"] .t3-action-input::placeholder {
+    color: #a8a29e !important;
+    font-weight: 500 !important;
+}
+
+/* ==========================================================================
+   7. HỆ THỐNG MODAL (HMI, KIỂM TRA KHUÔN, ĐĂNG NHẬP, GOOGLE DRIVE)
+========================================================================== */
+[data-theme="light"] .modal-content,
+[data-theme="light"] .qc-modal-content {
+    background: #fffdfa !important;
+    color: #1c1917 !important;
+    border: 1.5px solid #ded5c6 !important;
+    box-shadow: 0 25px 50px -12px rgba(68, 64, 60, 0.25) !important;
+}
+
+[data-theme="light"] .modal-body {
+    background-color: #fffdfa !important;
+    color: #1c1917 !important;
+}
+
+[data-theme="light"] .modal-header {
+    background: linear-gradient(90deg, #0284c7, #0369a1) !important;
+    border-bottom: none !important;
+}
+
+[data-theme="light"] .modal-header .modal-title,
+[data-theme="light"] .modal-header h6 {
+    color: #ffffff !important;
+    font-weight: 800 !important;
+}
+
+[data-theme="light"] .modal-footer {
+    background-color: #f8f3e8 !important;
+    border-top: 1px solid #ded5c6 !important;
+}
+
+[data-theme="light"] #hmiPhotoContainer {
+    background-color: #f8f3e8 !important;
+    border: 2px dashed #93c5fd !important;
+}
+
+[data-theme="light"] .accordion-button {
+    background-color: #f5eee2 !important;
+    color: #1c1917 !important;
+    font-weight: 700 !important;
+}
+
+[data-theme="light"] .accordion-button:not(.collapsed) {
+    background-color: #e0f2fe !important;
+    color: #0369a1 !important;
+}
+
+[data-theme="light"] .accordion-body {
+    background-color: #f8f3e8 !important;
+    color: #1c1917 !important;
+}
+
+[data-theme="light"] .accordion-body pre.text-info {
+    color: #0369a1 !important;
+}
+
+/* ==========================================================================
+   8. GHI ĐÈ CÁC CLASS TIỆN ÍCH BOOTSTRAP
+========================================================================== */
+[data-theme="light"] .text-light {
+    color: #57534e !important;
+}
+
+[data-theme="light"] .text-info {
+    color: #0284c7 !important;
+}
+
+[data-theme="light"] .text-warning {
+    color: #b45309 !important;
+}
+
+[data-theme="light"] .text-white {
+    color: #1c1917 !important;
+}
+
+/* Ngoại lệ: Giữ chữ trắng trong các nút 3D, badge màu */
+[data-theme="light"] .btn-3d-primary,
+[data-theme="light"] .btn-3d-emerald,
+[data-theme="light"] .btn-3d-amber,
+[data-theme="light"] .btn-3d-ruby,
+[data-theme="light"] .badge.bg-success,
+[data-theme="light"] .badge.bg-danger,
+[data-theme="light"] .badge.bg-primary,
+[data-theme="light"] .modal-header .modal-title,
+[data-theme="light"] .modal-header h6,
+[data-theme="light"] .nav-tabs .nav-link.active,
+[data-theme="light"] .table thead th {
+    color: #ffffff !important;
+}
+
+[data-theme="light"] .badge.bg-dark {
+    background-color: #efe7d7 !important;
+    color: #292524 !important;
+    border: 1px solid #ded5c6 !important;
+    font-weight: 700 !important;
+}
+
+[data-theme="light"] .badge.bg-secondary {
+    background-color: #efe7d7 !important;
+    color: #44403c !important;
+    font-weight: 700 !important;
+}
