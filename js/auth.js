@@ -128,7 +128,6 @@
             if (currentTab1DateListener && db) db.ref(`qc_tab1_store_v1/${currentTab1DateListener}`).off();
             if (currentTab2DateListener && db) db.ref(`qc_tab2_store_v1/${currentTab2DateListener}`).off();
             currentTab1DateListener = null; currentTab2DateListener = null;
-                if (typeof inStop === 'function') inStop();
             if (typeof inStop === 'function') inStop();
             isRealtimeBound = false;
         }
