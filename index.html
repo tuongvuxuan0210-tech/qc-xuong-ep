@@ -21,6 +21,7 @@
     <link rel="stylesheet" href="css/theme.css">
     <!-- Giao Diện & Định Dạng Toàn Hệ Thống -->
     <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/xuong-in.css">
 </head>
 <body class="not-logged-in">
 
@@ -91,6 +92,12 @@
                     <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab3DefectStats" type="button"
                         onclick="loadAndRenderTab3()">
                         🚨 TAB 3: THỐNG KÊ LỖI & CÁCH XỬ LÝ
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab4XuongIn" type="button"
+                        onclick="inKhoiDong()">
+                        🖨️ TAB 4: XƯỞNG IN (KIỂM TRA HÀNG NGÀY)
                     </button>
                 </li>
             </ul>
@@ -243,6 +250,29 @@
                             </table>
                         </div>
                     </div>
+                </div>
+
+                <!-- TAB 4: XƯỞNG IN TAMPON – KIỂM TRA HÀNG NGÀY (GIAI ĐOẠN 1 – CƠ BẢN) -->
+                <div class="tab-pane fade" id="tab4XuongIn" role="tabpanel">
+                    <div class="card">
+                        <div class="qc-sticky-toolbar d-flex flex-wrap justify-content-between align-items-center gap-2">
+                            <div>
+                                <h5 class="fw-bold text-info m-0">Xưởng In Tampon – Kiểm Tra Hàng Ngày (Giai đoạn 1 – Cơ bản)</h5>
+                                <small class="text-light opacity-75" style="font-size: 11px;">Phiếu P1 Pha mực · P2 Cấp mực &amp; châm · P3 Mẫu đầu · P4 QC đi kiểm 2h · P5 Dừng máy. Mỗi ô tự lưu lên Firebase ngay khi nhập.</small>
+                            </div>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <select id="inShift" class="form-select form-select-sm fw-bold qc-date-input" style="width: 130px;" onchange="onInDateShiftChange()">
+                                    <option value="NGAY">☀️ Ca Ngày</option>
+                                    <option value="DEM">🌙 Ca Đêm</option>
+                                </select>
+                                <input type="date" id="inDate" class="form-control form-control-sm fw-bold text-center qc-date-input"
+                                    style="width: 140px;" onchange="onInDateShiftChange()">
+                                <button class="btn btn-sm btn-outline-info fw-bold rounded-pill px-3" onclick="exportTabInExcel()">📊 Excel</button>
+                            </div>
+                        </div>
+                        <div id="inRoot" class="p-2"></div>
+                    </div>
+                    <div id="inToast" class="in-toast"></div>
                 </div>
 
                 <!-- TAB 3: THỐNG KÊ LỖI & CÁCH XỬ LÝ (XEM THEO KHOẢNG NGÀY) -->
@@ -876,6 +906,7 @@
     <script src="js/tab2.js"></script>
     <script src="js/doi-sach-4m.js"></script>
     <script src="js/tab3.js"></script>
+    <script src="js/tab-in.js"></script>
     <script src="js/export-service.js"></script>
     <script src="js/app.js"></script>
 </body>
