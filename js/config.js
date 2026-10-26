@@ -3,7 +3,7 @@
  * Xưởng Ép Nhựa Hải Tân
  */
 
-// CẤU HÌNH TỔNG QUAN: 21 MÁY (XƯỞNG 1: M1-M10, XƯỞNG 2: M11-M21)
+// CẤU HÌNH TỔNG QUAN: 21 MÁY (XƯỞNG 2: M1-M10, XƯỞNG 1: M11-M21 – mã nội bộ XUONG1 = M1-M10, XUONG2 = M11-M21)
 const TOTAL_MACHINES = 21;
 const QC_SLOTS_DAY = ["07:30", "09:30", "11:30", "13:30", "15:30", "17:30"];
 const QC_SLOTS_NIGHT = ["19:30", "21:30", "23:30", "01:30", "03:30", "05:30"];

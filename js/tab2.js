@@ -104,8 +104,8 @@
             if (btnX2) btnX2.className = filter === 'XUONG2' ? 'btn btn-sm btn-3d-primary rounded-pill px-3 active' : 'btn btn-sm btn-outline-info rounded-pill px-3';
 
             if (titleEl) {
-                if (filter === 'XUONG1') titleEl.innerText = 'Kiểm Tra Sản Phẩm Định Kỳ (2 Giờ / Lần) - Xưởng 1 (M1 - M10)';
-                else if (filter === 'XUONG2') titleEl.innerText = 'Kiểm Tra Sản Phẩm Định Kỳ (2 Giờ / Lần) - Xưởng 2 (M11 - M21)';
+                if (filter === 'XUONG1') titleEl.innerText = 'Kiểm Tra Sản Phẩm Định Kỳ (2 Giờ / Lần) - Xưởng 2 (M1 - M10)';
+                else if (filter === 'XUONG2') titleEl.innerText = 'Kiểm Tra Sản Phẩm Định Kỳ (2 Giờ / Lần) - Xưởng 1 (M11 - M21)';
                 else titleEl.innerText = 'Kiểm Tra Sản Phẩm Định Kỳ (2 Giờ / Lần) - Toàn Xưởng (M1 - M21)';
             }
             renderTab2();

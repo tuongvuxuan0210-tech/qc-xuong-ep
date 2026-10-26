@@ -129,5 +129,6 @@
             if (currentTab2DateListener && db) db.ref(`qc_tab2_store_v1/${currentTab2DateListener}`).off();
             currentTab1DateListener = null; currentTab2DateListener = null;
             if (typeof inStop === 'function') inStop();
+            if (typeof rvStop === 'function') rvStop();
             isRealtimeBound = false;
         }

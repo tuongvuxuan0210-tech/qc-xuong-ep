@@ -25,6 +25,7 @@
                     if (!tab3ActionNotesStore[d]) promises.push(db.ref(`qc_tab3_actions_v1/${d}`).once('value').then(s => tab3ActionNotesStore[d] = s.val() || {}));
                 });
                 promises.push(qcEnsureDefectMemory());
+                if (typeof rvLoadDates === 'function') promises.push(rvLoadDates(dates));
                 if (promises.length > 0) await Promise.all(promises);
             }
             debouncedRenderTab3();
@@ -55,7 +56,7 @@
                 if (tab3ShiftFilter === 'NGAY' && !item.isDay) return;
                 if (tab3ShiftFilter === 'DEM' && item.isDay) return;
                 if (item.source === 'TAB1') countTab1++;
-                else { countTab2++; totalDefectPcs += item.defectQty; }
+                else if (item.source === 'TAB2') { countTab2++; totalDefectPcs += item.defectQty; }
                 defectList.push(item);
             });
 
@@ -70,6 +71,9 @@
             let displayList = defectList.filter(item => {
                 if (filterSource === 'TAB1') return item.source === 'TAB1';
                 if (filterSource === 'TAB2') return item.source === 'TAB2';
+                if (filterSource === 'TRAVE') return item.source === 'TRAVE';
+                if (filterSource === 'TRAVE_CDS') return item.source === 'TRAVE' && item.nguon !== 'KH';
+                if (filterSource === 'TRAVE_KH') return item.source === 'TRAVE' && item.nguon === 'KH';
                 return true;
             });
 
@@ -85,7 +89,9 @@
                 let tr = document.createElement('tr');
                 let lapLaiInfo = qcPhanTichLapLai(item, qcPool);
                 if (lapLaiInfo.lapLai) tr.classList.add('qc-row-lap-lai');
-                let badgeSource = item.source === 'TAB1' ? `<span class="badge bg-warning text-dark fw-bold">⚙️ Tab 1</span>` : `<span class="badge bg-info text-dark fw-bold">📋 Tab 2</span>`;
+                let badgeSource = item.source === 'TAB1' ? `<span class="badge bg-warning text-dark fw-bold">⚙️ Tab 1</span>`
+                    : item.source === 'TRAVE' ? (item.nguon === 'KH' ? `<span class="badge bg-danger fw-bold">🚚 KH trả về</span>` : `<span class="badge bg-warning text-dark fw-bold">↩️ CĐ sau trả</span>`)
+                    : `<span class="badge bg-info text-dark fw-bold">📋 Tab 2</span>`;
                 let actionsData = tab3ActionNotesStore[item.date] || {};
                 let t1Data = tab1Store[item.date] || {};
                 let t2Data = tab2Store[item.date] || {};
@@ -95,7 +101,7 @@
                 let imgUrl = actionsData[`${item.key}_img`] || sourceRec.img || '';
                 let driveUrl = actionsData[`${item.key}_drive_url`] || sourceRec.driveUrl || '';
                 let driveFile = actionsData[`${item.key}_drive_file`] || sourceRec.driveFile || '';
-                let titleText = `${item.source === 'TAB1' ? 'Tab 1: ' : 'Tab 2: '} ${item.machine} (${item.shiftTime}) - Khuôn: ${item.moldId || '-'}`;
+                let titleText = `${item.source === 'TAB1' ? 'Tab 1: ' : item.source === 'TRAVE' ? 'Trả về: ' : 'Tab 2: '} ${item.machine} (${item.shiftTime}) - Khuôn: ${item.moldId || '-'}`;
                 let imgHtml = '';
 
                 if (imgUrl) {
@@ -378,7 +384,7 @@
             // Cập nhật badge phạm vi xưởng và ca theo bộ lọc trên đầu
             let scopeBadgeEl = document.getElementById('t2ChartScopeBadge');
             if (scopeBadgeEl) {
-                let wsText = tab3WorkshopFilter === 'XUONG1' ? '🏭 Xưởng 1 (M1-10)' : (tab3WorkshopFilter === 'XUONG2' ? '🏭 Xưởng 2 (M11-21)' : '🌐 Toàn Xưởng');
+                let wsText = tab3WorkshopFilter === 'XUONG1' ? '🏭 Xưởng 2 (M1-10)' : (tab3WorkshopFilter === 'XUONG2' ? '🏭 Xưởng 1 (M11-21)' : '🌐 Toàn Xưởng');
                 let shiftText = tab3ShiftFilter === 'NGAY' ? '☀️ Ca Ngày' : (tab3ShiftFilter === 'DEM' ? '🌙 Ca Đêm' : '☀️🌙 Cả Ca');
                 scopeBadgeEl.innerText = `${wsText} | ${shiftText}`;
             }
@@ -837,7 +843,7 @@
                                     title: function(ctxArr) {
                                         let k = ctxArr[0].label;
                                         let m = stats.machinesData[k];
-                                        let wsName = m.workshop === 'XUONG1' ? 'Xưởng 1' : 'Xưởng 2';
+                                        let wsName = m.workshop === 'XUONG1' ? 'Xưởng 2' : 'Xưởng 1';
                                         return `Máy ${k} (${wsName})`;
                                     },
                                     label: function(ctx) {

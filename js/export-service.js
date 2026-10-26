@@ -18,7 +18,7 @@
                     let shiftInspector = getShiftInspector(dayData, shift, m);
                     let k = `M${m}_${shift}`;
                     let r = dayData[k] || dayData[`${k}_Đầu ca`] || dayData[`${k}_Cuối ca`] || {};
-                    let xFactor = m <= 10 ? 'Xưởng 1' : 'Xưởng 2';
+                    let xFactor = m <= 10 ? 'Xưởng 2' : 'Xưởng 1';
                     rows.push({
                         "Phân Xưởng": xFactor,
                         "Máy": `M${m}`,
@@ -61,7 +61,7 @@
                     slots.forEach(slot => {
                         let k = `M${m}_${shift}_${slot}`;
                         let r = dayData[k] || {};
-                        let xFactor = m <= 10 ? 'Xưởng 1' : 'Xưởng 2';
+                        let xFactor = m <= 10 ? 'Xưởng 2' : 'Xưởng 1';
                         rows.push({
                             "Phân Xưởng": xFactor,
                             "Máy": `M${m}`,

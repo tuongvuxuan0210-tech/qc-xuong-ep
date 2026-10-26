@@ -176,6 +176,8 @@ function qcThuThapLoiTheoNgay(date) {
         it.loaiLoiTuDong = tuDong;
         it.loaiLoi = (it.doiSach && it.doiSach.loaiLoi) ? it.doiSach.loaiLoi : tuDong;
     });
+    // Lỗi do công đoạn sau / khách hàng trả về (Tab 5) – loại lỗi đã chọn sẵn khi nhập
+    if (typeof rvThuThapTheoNgay === 'function') list.push(...rvThuThapTheoNgay(date));
     return list;
 }
 
@@ -249,7 +251,7 @@ function qcDongBoBoNho(dates, allDefects) {
         if (cu && !tab3ActionNotesStore[it.date]) { moi.ds = cu.ds || ''; moi.tt = cu.tt || ''; }
         if (qcBanGhiKhacNhau(cu, moi)) updates[id] = moi;
     });
-    let dateSet = new Set(dates.filter(d => tab1Store[d] && tab2Store[d]));
+    let dateSet = new Set(dates.filter(d => tab1Store[d] && tab2Store[d] && (typeof traVeStore === 'undefined' || traVeStore[d])));
     Object.keys(qcDefectMemory).forEach(id => {
         let r = qcDefectMemory[id];
         if (r && dateSet.has(r.d) && !idsHienTai.has(id)) updates[id] = null;
@@ -287,7 +289,8 @@ async function qcQuetBoNhoLoi() {
             await Promise.all(dates.slice(i, i + 10).map(d => Promise.all([
                 tab1Store[d] ? null : db.ref(`qc_tab1_store_v1/${d}`).once('value').then(s => tab1Store[d] = s.val() || {}),
                 tab2Store[d] ? null : db.ref(`qc_tab2_store_v1/${d}`).once('value').then(s => tab2Store[d] = s.val() || {}),
-                tab3ActionNotesStore[d] ? null : db.ref(`qc_tab3_actions_v1/${d}`).once('value').then(s => tab3ActionNotesStore[d] = s.val() || {})
+                tab3ActionNotesStore[d] ? null : db.ref(`qc_tab3_actions_v1/${d}`).once('value').then(s => tab3ActionNotesStore[d] = s.val() || {}),
+                typeof rvLoadDates === 'function' ? rvLoadDates([d]) : null
             ])));
         }
         let all = [];
@@ -487,8 +490,14 @@ function qcPoolHienTai() {
 }
 
 function qcMoPhieuDoiSach(idx) {
-    if (!checkAuthOrAlert()) return;
     let it = tab3LastDisplayList[idx];
+    if (!it) return;
+    qcMoPhieuDoiSachItem(it);
+}
+
+// Mở phiếu đối sách cho 1 lỗi bất kỳ (Tab 3 hoặc Tab 5 – lỗi trả về)
+function qcMoPhieuDoiSachItem(it) {
+    if (!checkAuthOrAlert()) return;
     if (!it) return;
     qcTaoModalDoiSach();
     qcDoiSachDangMo = it;
@@ -582,6 +591,7 @@ function qcLuuPhieuDoiSach() {
         tab3ActionNotesStore[it.date][`${it.key}_4m`] = ds;
         if (qcDoiSachModalInstance) qcDoiSachModalInstance.hide();
         renderTab3();
+        if (typeof renderTraVe === 'function') renderTraVe();
     }).catch(err => alert('⚠️ Lỗi lưu đối sách: ' + err.message));
 }
 
@@ -594,7 +604,7 @@ function qcXuatExcelDoiSach() {
         let pt = qcPhanTichLapLai(it, pool);
         let ds = it.doiSach || {};
         return {
-            'STT': i + 1, 'Ngày Phát Sinh': it.date, 'Nguồn Lỗi': it.source === 'TAB1' ? 'Tab 1' : 'Tab 2',
+            'STT': i + 1, 'Ngày Phát Sinh': it.date, 'Nguồn Lỗi': it.source === 'TAB1' ? 'Tab 1' : it.source === 'TAB2' ? 'Tab 2' : (it.nguon === 'KH' ? 'Khách hàng trả về' : 'Công đoạn sau trả về'),
             'Máy': it.machine, 'Ca / Giờ': it.shiftTime, 'QC Ghi Nhận': it.inspector || '', 'Mã Khuôn': it.moldId || '',
             'Hạng Mục / Loại Lỗi': it.category, 'SL Mẫu Lỗi': it.defectQty || '', 'Mô Tả Lỗi': it.description,
             'Loại Lỗi Chuẩn': qcTenLoaiLoi(it.loaiLoi),

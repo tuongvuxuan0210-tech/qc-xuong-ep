@@ -134,8 +134,8 @@
             if (btnX2) btnX2.className = filter === 'XUONG2' ? 'btn btn-sm btn-3d-primary rounded-pill px-3 active' : 'btn btn-sm btn-outline-info rounded-pill px-3';
 
             if (titleEl) {
-                if (filter === 'XUONG1') titleEl.innerText = 'Thông Số Vận Hành Máy Ép Haitian & Tình Trạng Khuôn - Xưởng 1 (M1 - M10)';
-                else if (filter === 'XUONG2') titleEl.innerText = 'Thông Số Vận Hành Máy Ép Haitian & Tình Trạng Khuôn - Xưởng 2 (M11 - M21)';
+                if (filter === 'XUONG1') titleEl.innerText = 'Thông Số Vận Hành Máy Ép Haitian & Tình Trạng Khuôn - Xưởng 2 (M1 - M10)';
+                else if (filter === 'XUONG2') titleEl.innerText = 'Thông Số Vận Hành Máy Ép Haitian & Tình Trạng Khuôn - Xưởng 1 (M11 - M21)';
                 else titleEl.innerText = 'Thông Số Vận Hành Máy Ép Haitian & Tình Trạng Khuôn - Toàn Xưởng (M1 - M21)';
             }
             renderTab1();
