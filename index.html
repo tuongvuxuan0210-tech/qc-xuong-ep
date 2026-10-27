@@ -22,6 +22,7 @@
     <!-- Giao Diện & Định Dạng Toàn Hệ Thống -->
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/xuong-in.css">
+    <link rel="stylesheet" href="css/tra-ve.css">
 </head>
 <body class="not-logged-in">
 
@@ -100,6 +101,12 @@
                         🖨️ TAB 4: XƯỞNG IN (KIỂM TRA HÀNG NGÀY)
                     </button>
                 </li>
+                <li class="nav-item">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab5TraVe" type="button"
+                        onclick="loadAndRenderTraVe()">
+                        📦 TAB 5: LỖI TRẢ VỀ (CĐ SAU &amp; KHÁCH HÀNG)
+                    </button>
+                </li>
             </ul>
 
             <div class="tab-content" id="qcTabsContent">
@@ -112,7 +119,7 @@
                                 <h5 class="fw-bold text-info m-0" id="tab1Title">Thông Số Vận Hành Máy Ép Haitian & Tình
                                     Trạng Khuôn (Toàn Xưởng M1 - M21)</h5>
                                 <small class="text-light opacity-75" style="font-size: 11px;">Mã khuôn tự đồng bộ từ
-                                    MES. Tên QC điền 1 máy tự đồng bộ cho các máy cùng phân xưởng trong ca (X1: M1-M10, X2: M11-M21).</small>
+                                    MES. Tên QC điền 1 máy tự đồng bộ cho các máy cùng phân xưởng trong ca (Xưởng 1: M11-M21, Xưởng 2: M1-M10).</small>
                             </div>
                             <div class="d-flex align-items-center gap-2 flex-wrap">
                                 <!-- BỘ LỌC PHÂN XƯỞNG TAB 1 -->
@@ -120,9 +127,9 @@
                                     <button type="button" class="btn btn-sm btn-3d-primary rounded-pill px-3"
                                         id="btnT1FilterAll" onclick="setTab1WorkshopFilter('ALL')">🌐 Toàn Xưởng</button>
                                     <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-3"
-                                        id="btnT1FilterX1" onclick="setTab1WorkshopFilter('XUONG1')">🏭 Xưởng 1 (M1-10)</button>
+                                        id="btnT1FilterX2" onclick="setTab1WorkshopFilter('XUONG2')">🏭 Xưởng 1 (M11-21)</button>
                                     <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-3"
-                                        id="btnT1FilterX2" onclick="setTab1WorkshopFilter('XUONG2')">🏭 Xưởng 2 (M11-21)</button>
+                                        id="btnT1FilterX1" onclick="setTab1WorkshopFilter('XUONG1')">🏭 Xưởng 2 (M1-10)</button>
                                 </div>
                                 <!-- BỘ LỌC CA TAB 1 -->
                                 <div class="btn-group btn-group-sm rounded-pill p-1 shadow-sm qc-filter-pill-group">
@@ -187,9 +194,9 @@
                                     <button type="button" class="btn btn-sm btn-3d-primary rounded-pill px-3"
                                         id="btnT2FilterAll" onclick="setTab2WorkshopFilter('ALL')">🌐 Toàn Xưởng</button>
                                     <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-3"
-                                        id="btnT2FilterX1" onclick="setTab2WorkshopFilter('XUONG1')">🏭 Xưởng 1 (M1-10)</button>
+                                        id="btnT2FilterX2" onclick="setTab2WorkshopFilter('XUONG2')">🏭 Xưởng 1 (M11-21)</button>
                                     <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-3"
-                                        id="btnT2FilterX2" onclick="setTab2WorkshopFilter('XUONG2')">🏭 Xưởng 2 (M11-21)</button>
+                                        id="btnT2FilterX1" onclick="setTab2WorkshopFilter('XUONG1')">🏭 Xưởng 2 (M1-10)</button>
                                 </div>
                                 <!-- BỘ LỌC CA TAB 2 -->
                                 <div class="btn-group btn-group-sm rounded-pill p-1 shadow-sm qc-filter-pill-group">
@@ -252,6 +259,68 @@
                     </div>
                 </div>
 
+                <!-- TAB 5: LỖI TRẢ VỀ TỪ CÔNG ĐOẠN SAU & KHÁCH HÀNG -->
+                <div class="tab-pane fade" id="tab5TraVe" role="tabpanel">
+                    <div class="card">
+                        <div class="qc-sticky-toolbar d-flex flex-wrap justify-content-between align-items-center gap-2">
+                            <div>
+                                <h5 class="fw-bold text-warning m-0">📦 Lỗi Trả Về – Công Đoạn Sau &amp; Khách Hàng</h5>
+                                <small class="text-light opacity-75" style="font-size: 11px;">Ghi nhận hàng ép bị công đoạn sau (in, lắp ráp…) hoặc khách hàng trả về. Nguyên nhân &amp; đối sách 4M dùng chung với Tab 3, tự nhận diện lỗi lặp lại theo khuôn.</small>
+                            </div>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <span class="small fw-bold text-info">Từ:</span>
+                                <input type="date" id="rvFromDate" class="form-control form-control-sm fw-bold text-center qc-date-input" style="width: 135px;" onchange="loadAndRenderTraVe()">
+                                <span class="small fw-bold text-info">Đến:</span>
+                                <input type="date" id="rvToDate" class="form-control form-control-sm fw-bold text-center qc-date-input" style="width: 135px;" onchange="loadAndRenderTraVe()">
+                                <select id="rvFilterNguon" class="form-select form-select-sm fw-bold qc-select-source" style="width: 150px;" onchange="renderTraVe()">
+                                    <option value="ALL">Nguồn: Tất cả</option>
+                                    <option value="CDS">↩️ Công đoạn sau</option>
+                                    <option value="KH">🚚 Khách hàng</option>
+                                </select>
+                                <select id="rvFilterTT" class="form-select form-select-sm fw-bold qc-select-source" style="width: 165px;" onchange="renderTraVe()">
+                                    <option value="ALL">Đối sách: Tất cả</option>
+                                    <option value="CHUA">⚠️ Chưa lập đủ 4M</option>
+                                    <option value="DANG">⏳ Đang thực hiện</option>
+                                    <option value="XONG">✅ Đã xác nhận hiệu quả</option>
+                                </select>
+                                <input type="search" id="rvSearch" class="form-control form-control-sm qc-date-input" style="width: 170px;" placeholder="🔍 Mã hàng, khuôn, order…" oninput="renderTraVe()">
+                                <button class="btn btn-sm btn-outline-info fw-bold rounded-pill px-3" onclick="rvXuatExcel()">📊 Excel</button>
+                                <button class="btn btn-sm btn-3d-ruby px-3" onclick="rvMoForm()">➕ Nhập lỗi trả về</button>
+                            </div>
+                        </div>
+                        <div class="row g-2 mb-3">
+                            <div class="col-md col-6"><div class="kpi-card kpi-card-red"><div class="kpi-card-title small">📦 Số lần trả về</div><div class="kpi-num text-danger" id="rvKpiTotal">0</div></div></div>
+                            <div class="col-md col-6"><div class="kpi-card kpi-card-purple"><div class="kpi-card-title small">🔢 Tổng SL trả về (sp)</div><div class="kpi-num text-danger" id="rvKpiQty">0</div></div></div>
+                            <div class="col-md col-6"><div class="kpi-card kpi-card-amber"><div class="kpi-card-title small">↩️ CĐ sau / 🚚 Khách hàng</div><div class="kpi-num text-warning" id="rvKpiSplit">0 / 0</div><div class="small opacity-75" id="rvKpiSplitQty"></div></div></div>
+                            <div class="col-md col-6"><div class="kpi-card kpi-card-blue"><div class="kpi-card-title small">⚠️ Chưa lập đủ đối sách 4M</div><div class="kpi-num text-info" id="rvKpiNo4M">0</div></div></div>
+                            <div class="col-md col-6"><div class="kpi-card kpi-card-red"><div class="kpi-card-title small">🔁 Lỗi lặp lại</div><div class="kpi-num text-danger" id="rvKpiRepeat">0</div></div></div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-bordered align-middle text-center" style="min-width: 1600px;">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 40px;" class="sticky-col">STT</th>
+                                        <th style="width: 85px;">Ngày Nhận</th>
+                                        <th style="width: 110px;">Nguồn / Bên Trả</th>
+                                        <th style="width: 150px;">Mã Hàng / SP / Order</th>
+                                        <th style="width: 110px;">Mã Khuôn</th>
+                                        <th style="width: 90px;">Máy / Ca / Ngày SX</th>
+                                        <th style="width: 60px;">SL Lô</th>
+                                        <th style="width: 85px; background: linear-gradient(180deg, #e11d48 0%, #be123c 100%) !important;">SL Trả Về</th>
+                                        <th style="width: 190px; background: linear-gradient(180deg, #b91c1c 0%, #991b1b 100%) !important;">Lỗi</th>
+                                        <th style="width: 140px;">Xử Lý Hàng Trả</th>
+                                        <th style="width: 170px;">Lần Đầu / Lặp Lại</th>
+                                        <th style="width: 260px; background: linear-gradient(180deg, #0284c7 0%, #0369a1 100%) !important;">🛠️ Nguyên Nhân &amp; Đối Sách 4M</th>
+                                        <th style="width: 60px;"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="rvTbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div id="rvToast" class="in-toast"></div>
+                </div>
+
                 <!-- TAB 4: XƯỞNG IN TAMPON – KIỂM TRA HÀNG NGÀY (GIAI ĐOẠN 1 – CƠ BẢN) -->
                 <div class="tab-pane fade" id="tab4XuongIn" role="tabpanel">
                     <div class="card">
@@ -283,7 +352,7 @@
                             <div>
                                 <h5 class="fw-bold text-danger m-0">🚨 Thống Kê Tổng Hợp Lỗi & Biện Pháp Khắc Phục</h5>
                                 <small class="text-light opacity-75" style="font-size: 11px;">Lấy thông tin từ ghi chú
-                                    lỗi Tab 1 & Tab 2 theo khoảng thời gian tùy chọn.</small>
+                                    lỗi Tab 1, Tab 2 &amp; lỗi trả về (Tab 5) theo khoảng thời gian tùy chọn.</small>
                             </div>
                             <div class="d-flex align-items-center gap-2 flex-wrap">
                                 <!-- CHỌN KHOẢNG NGÀY -->
@@ -301,9 +370,9 @@
                                     <button type="button" class="btn btn-sm btn-3d-primary rounded-pill px-2 py-1"
                                         id="btnT3WsAll" onclick="setTab3WorkshopFilter('ALL')">🌐 Toàn Xưởng</button>
                                     <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-2 py-1"
-                                        id="btnT3WsX1" onclick="setTab3WorkshopFilter('XUONG1')">🏭 X1 (M1-10)</button>
+                                        id="btnT3WsX2" onclick="setTab3WorkshopFilter('XUONG2')">🏭 X1 (M11-21)</button>
                                     <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-2 py-1"
-                                        id="btnT3WsX2" onclick="setTab3WorkshopFilter('XUONG2')">🏭 X2 (M11-21)</button>
+                                        id="btnT3WsX1" onclick="setTab3WorkshopFilter('XUONG1')">🏭 X2 (M1-10)</button>
                                 </div>
 
                                 <!-- BỘ LỌC CA TAB 3 -->
@@ -322,6 +391,9 @@
                                     <option value="ALL">Nguồn: Tất cả</option>
                                     <option value="TAB1">Chỉ Tab 1 (Khuôn/Máy)</option>
                                     <option value="TAB2">Chỉ Tab 2 (SP Định Kỳ)</option>
+                                    <option value="TRAVE">Lỗi trả về (tất cả)</option>
+                                    <option value="TRAVE_CDS">↩️ Công đoạn sau trả về</option>
+                                    <option value="TRAVE_KH">🚚 Khách hàng trả về</option>
                                 </select>
                                 <button type="button" class="btn btn-sm btn-outline-warning fw-bold rounded-pill px-3 shadow-sm"
                                     onclick="openGoogleDriveFolderModal()">
@@ -452,11 +524,11 @@
                                             <div class="d-flex align-items-center gap-3 small" style="font-size: 11px;">
                                                 <span class="d-inline-flex align-items-center gap-1">
                                                     <span style="display:inline-block; width:12px; height:12px; background:linear-gradient(180deg, #38bdf8, #0284c7); border-radius:3px;"></span>
-                                                    <span>Xưởng 1 (M1 - M10)</span>
+                                                    <span>Xưởng 2 (M1 - M10)</span>
                                                 </span>
                                                 <span class="d-inline-flex align-items-center gap-1">
                                                     <span style="display:inline-block; width:12px; height:12px; background:linear-gradient(180deg, #a855f7, #7c3aed); border-radius:3px;"></span>
-                                                    <span>Xưởng 2 (M11 - M21)</span>
+                                                    <span>Xưởng 1 (M11 - M21)</span>
                                                 </span>
                                                 <span class="d-inline-flex align-items-center gap-1">
                                                     <span style="display:inline-block; width:12px; height:12px; background:linear-gradient(180deg, #f43f5e, #be123c); border-radius:3px;"></span>
@@ -907,6 +979,7 @@
     <script src="js/doi-sach-4m.js"></script>
     <script src="js/tab3.js"></script>
     <script src="js/tab-in.js"></script>
+    <script src="js/tra-ve.js"></script>
     <script src="js/export-service.js"></script>
     <script src="js/app.js"></script>
 </body>
