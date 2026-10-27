@@ -4,3 +4,16 @@
 .rv-form .rv-note { font-size: 12px; color: var(--text-secondary); border-left: 3px solid #10b981; padding: 6px 10px; background: rgba(16, 185, 129, .07); border-radius: 0 6px 6px 0; margin-top: 6px; }
 #rvTbody td { font-size: 12.5px; }
 #tab5TraVe .kpi-num { font-size: 26px; font-weight: 800; }
+/* Ảnh lỗi trả về */
+.rv-thumbs { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.rv-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 6px; border: 1px solid var(--cyan-glow); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-size: 16px; margin: 0; }
+.rv-thumb-err { opacity: .35; }
+.rv-thumb-wait { border-style: dashed; cursor: default; }
+.rv-thumb-add { border: 1.5px dashed var(--input-border); color: var(--text-secondary); font-weight: 800; }
+.rv-thumb-add:hover { border-color: var(--cyan-glow); color: var(--cyan-glow); }
+.rv-anh-box { display: flex; flex-wrap: wrap; gap: 8px; }
+.rv-anh-item { position: relative; width: 96px; }
+.rv-anh-item img, .rv-anh-item > span { width: 96px; height: 96px; object-fit: cover; border-radius: 8px; border: 1px solid var(--table-border); display: flex; align-items: center; justify-content: center; }
+.rv-anh-moi img { border: 2px solid #10b981; }
+.rv-anh-cap { font-size: 10.5px; text-align: center; color: var(--text-secondary); }
+.rv-anh-x { position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 50%; border: none; background: #e11d48; color: #fff; font-size: 11px; line-height: 22px; padding: 0; }
