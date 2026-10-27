@@ -14,6 +14,9 @@ let rvListenerRange = '';
 let rvModalInstance = null;
 let rvEditing = null;               // { date, id } khi sửa
 let rvLastList = [];
+let rvAnhCho = [];                  // ảnh mới chọn trong phiếu, chưa tải: { id, loai, data (base64 nén) }
+let rvAnhXoa = [];                  // id ảnh cũ bị bỏ khi sửa phiếu
+const RV_LOAI_ANH = { HANG: '📦 Hàng lỗi', TEM: '🏷️ Tem lô', KHAC: '🖼️ Khác' };
 
 const RV_NGUON = {
     CDS: { ten: 'Công đoạn sau', icon: '↩️', cls: 'bg-warning text-dark' },
@@ -172,13 +175,7 @@ function renderTraVe() {
         let tyLe = rvNum(r.slLo) > 0 ? ` <span class="small opacity-75">(${(rvNum(r.slTra) / rvNum(r.slLo) * 100).toFixed(1)}%)</span>` : '';
         let ttHang = r.ttHang || 'Chờ xử lý';
         let ttCls = ttHang === 'Đã xử lý xong' ? 'bg-success' : ttHang === 'Đang xử lý' ? 'bg-primary' : 'bg-secondary';
-        let actions = tab3ActionNotesStore[it.date] || {};
-        let hasImg = actions[`${it.key}_img`] || actions[`${it.key}_drive_file`] || actions[`${it.key}_drive_url`];
-        let viewImg = actions[`${it.key}_img`] || actions[`${it.key}_drive_url`] || actions[`${it.key}_drive_file`] || '';
-        let imgTitle = `Trả về: ${r.maHang || ''} ${r.tenSP || ''} - ${it.machine}`;
-        let imgHtml = hasImg
-            ? `<button type="button" class="btn btn-xs btn-3d-primary rounded-pill py-0 px-2" style="font-size:10.5px;" onclick="previewDefectImage('${escapeHtml(viewImg)}', '${escapeHtml(imgTitle)}')">🖼️ Xem ảnh</button>`
-            : `<label class="btn btn-xs btn-outline-info rounded-pill py-0 px-2 m-0" style="font-size:10.5px; cursor:pointer;">📸 Ảnh<input type="file" accept="image/*" style="display:none;" onchange="rvUploadImage(this, ${idx})"></label>`;
+        let imgHtml = rvHtmlAnhDong(it, idx);
         return `<tr class="${pt.lapLai ? 'qc-row-lap-lai' : ''}">
             <td class="fw-bold sticky-col">${idx + 1}</td>
             <td class="fw-bold text-info small">${escapeHtml(qcNgayNgan(it.date))}<div class="small opacity-75">${escapeHtml(r.nguoiBao || '')}</div></td>
@@ -211,11 +208,109 @@ function rvMoDoiSach(idx) {
     qcMoPhieuDoiSachItem(it);
 }
 
-async function rvUploadImage(inputEl, idx) {
-    let it = rvLastList[idx];
-    if (!it) return;
-    await handleDefectImageUpload(inputEl, it.date, it.key, it.machine, it.moldId);
-    renderTraVe();
+// ===================== ẢNH (lưu trên Google Drive, Firebase chỉ giữ link) =====================
+function rvDsAnh(r) {
+    return Object.entries((r && r.anh) || {}).filter(([, a]) => a && typeof a === 'object').sort((a, b) => (a[1].t || 0) - (b[1].t || 0));
+}
+
+function rvHtmlAnhDong(it, idx) {
+    let r = it.rec, ds = rvDsAnh(r);
+    let title = `Trả về: ${r.maHang || ''} ${r.tenSP || ''} - ${it.machine}`;
+    // Ảnh cũ (trước khi có nhiều ảnh) lưu ở phiếu Tab 3
+    let act = tab3ActionNotesStore[it.date] || {};
+    let thumbs = ds.map(([aid, a]) => {
+        let src = a.url ? getGoogleDriveThumbnailUrl(a.url) : (rvAnhTam[aid] || '');
+        let ttl = `${title} – ${RV_LOAI_ANH[a.loai] || ''}`;
+        if (!src) return `<span class="rv-thumb rv-thumb-wait" title="Đang chờ Google Drive trả link">⏳</span>`;
+        return `<img src="${escapeHtml(src)}" class="rv-thumb" loading="lazy" title="${escapeHtml(ttl)}" onclick="previewDefectImage('${escapeHtml(a.url || src)}', '${escapeHtml(ttl)}')" onerror="this.classList.add('rv-thumb-err')">`;
+    }).join('');
+    if (!ds.length && (act[`${it.key}_drive_url`] || act[`${it.key}_img`])) {
+        let v = act[`${it.key}_drive_url`] || act[`${it.key}_img`];
+        thumbs = `<img src="${escapeHtml(getGoogleDriveThumbnailUrl(v) || v)}" class="rv-thumb" onclick="previewDefectImage('${escapeHtml(v)}', '${escapeHtml(title)}')">`;
+    }
+    return `<div class="rv-thumbs">${thumbs}<label class="rv-thumb rv-thumb-add" title="Thêm ảnh">＋<input type="file" accept="image/*" multiple style="display:none;" onchange="rvThemAnhNhanh(this, ${idx})"></label></div>`;
+}
+
+let rvAnhTam = {};   // id ảnh -> base64 xem tạm trong phiên khi Drive chưa trả link
+
+// Tải 1 ảnh lên Google Drive qua webhook Apps Script, trả về link (hoặc '' nếu không nhận được)
+async function rvTaiAnhLenDrive(data, fileName, rec) {
+    if (!ZALO_WEBHOOK_URL || ZALO_WEBHOOK_URL.includes('URL_GOOGLE_APPS_SCRIPT')) return '';
+    try {
+        let res = await fetch(ZALO_WEBHOOK_URL, {
+            method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({
+                action: 'upload_to_drive', folderId: GOOGLE_DRIVE_FOLDER_ID, fileName,
+                fileData: data.split(',')[1] || data, mimeType: 'image/jpeg', sendToZalo: false,
+                date: rec.date, machine: rec.may || '', moldId: rec.moldId || rec.maHang || ''
+            })
+        });
+        let j = await res.json();
+        return (j && j.fileUrl) || '';
+    } catch (e) { console.warn('Tải ảnh lên Drive lỗi:', e); return ''; }
+}
+
+// Lưu danh sách ảnh chờ của 1 bản ghi: ghi mục ảnh lên Firebase, rồi tải ảnh lên Drive và cập nhật link
+async function rvLuuAnh(ngay, id, rec, dsAnh) {
+    if (!dsAnh.length) return;
+    let key = rvKey(id), n = 0, loi = 0;
+    for (let a of dsAnh) {
+        n++;
+        rvToast(`⏳ Đang tải ảnh ${n}/${dsAnh.length} lên Google Drive…`);
+        let fileName = `QC_TRAVE_${rec.may || 'MAY'}_${(rec.maHang || 'HANG').replace(/[^\w-]/g, '')}_${ngay}_${id}_${a.loai}_${n}.jpg`;
+        let base = `${RV_PATH}/${ngay}/${id}/anh/${a.id}`;
+        rvAnhTam[a.id] = a.data;
+        await db.ref(base).set({ loai: a.loai, ten: fileName, t: Date.now() + n });
+        let url = await rvTaiAnhLenDrive(a.data, fileName, { ...rec, date: ngay });
+        if (url) {
+            await db.ref(`${base}/url`).set(url);
+            // Ảnh đầu tiên cũng hiện ở Tab 3
+            let act = tab3ActionNotesStore[ngay] || (tab3ActionNotesStore[ngay] = {});
+            if (!act[`${key}_drive_url`]) { act[`${key}_drive_url`] = url; await db.ref(`qc_tab3_actions_v1/${ngay}/${key}_drive_url`).set(url); }
+        } else loi++;
+    }
+    rvToast(loi ? `⚠️ ${loi}/${dsAnh.length} ảnh chưa nhận được link Drive (xem tạm được trong phiên này).` : `✅ Đã lưu ${dsAnh.length} ảnh lên Google Drive.`, !!loi);
+}
+
+async function rvNenAnh(files, loai) {
+    let out = [];
+    for (let f of Array.from(files || [])) {
+        try { out.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), loai, data: await compressImage(f) }); }
+        catch (e) { alert('⚠️ Không đọc được ảnh: ' + e.message); }
+    }
+    return out;
+}
+
+async function rvThemAnhNhanh(inputEl, idx) {
+    if (!checkAuthOrAlert()) return;
+    let it = rvLastList[idx]; if (!it) return;
+    let ds = await rvNenAnh(inputEl.files, 'KHAC');
+    inputEl.value = '';
+    await rvLuuAnh(it.date, it.rvId, it.rec, ds);
+}
+
+// Trong phiếu nhập
+async function rvChonAnh(inputEl, loai) {
+    let ds = await rvNenAnh(inputEl.files, loai);
+    inputEl.value = '';
+    rvAnhCho.push(...ds);
+    rvVeAnhForm();
+}
+function rvBoAnhCho(aid) { rvAnhCho = rvAnhCho.filter(a => a.id !== aid); rvVeAnhForm(); }
+function rvBoAnhCu(aid) { rvAnhXoa.push(aid); rvVeAnhForm(); }
+
+function rvVeAnhForm() {
+    let box = document.getElementById('rvAnhBox'); if (!box) return;
+    let cu = [];
+    if (rvEditing) {
+        let r = (traVeStore[rvEditing.date] || {})[rvEditing.id] || {};
+        cu = rvDsAnh(r).filter(([aid]) => !rvAnhXoa.includes(aid));
+    }
+    let html = cu.map(([aid, a]) => {
+        let src = a.url ? getGoogleDriveThumbnailUrl(a.url) : (rvAnhTam[aid] || '');
+        return `<div class="rv-anh-item">${src ? `<img src="${escapeHtml(src)}">` : '<span>⏳</span>'}<div class="rv-anh-cap">${RV_LOAI_ANH[a.loai] || ''}</div><button type="button" class="rv-anh-x" onclick="rvBoAnhCu('${aid}')" title="Bỏ ảnh">✕</button></div>`;
+    }).join('') + rvAnhCho.map(a => `<div class="rv-anh-item rv-anh-moi"><img src="${a.data}"><div class="rv-anh-cap">${RV_LOAI_ANH[a.loai]} · mới</div><button type="button" class="rv-anh-x" onclick="rvBoAnhCho('${a.id}')" title="Bỏ ảnh">✕</button></div>`).join('');
+    box.innerHTML = html || '<div class="small text-muted">Chưa có ảnh. Nên chụp ảnh hàng lỗi và ảnh tem lô hàng.</div>';
 }
 
 // ===================== FORM NHẬP / SỬA =====================
@@ -292,6 +387,13 @@ function rvTaoModal() {
                 <select class="form-select form-select-sm" id="rvTtHang">${RV_TT_HANG.map(x => `<option>${x}</option>`).join('')}</select></div>
               <div class="col-12"><input class="form-control form-control-sm" id="rvXuLyNote" maxlength="300" placeholder="Ghi chú xử lý (ai làm, khi nào giao lại…)"></div>
             </div>
+            <div class="rv-sec">5. HÌNH ẢNH (lưu trên Google Drive)</div>
+            <div class="d-flex flex-wrap gap-2 mb-2">
+              <label class="btn btn-sm btn-outline-info fw-bold m-0">📦 Chụp ảnh hàng lỗi<input type="file" accept="image/*" capture="environment" multiple style="display:none;" onchange="rvChonAnh(this, 'HANG')"></label>
+              <label class="btn btn-sm btn-outline-info fw-bold m-0">🏷️ Chụp ảnh tem lô<input type="file" accept="image/*" capture="environment" style="display:none;" onchange="rvChonAnh(this, 'TEM')"></label>
+              <label class="btn btn-sm btn-outline-secondary fw-bold m-0">🖼️ Chọn ảnh có sẵn<input type="file" accept="image/*" multiple style="display:none;" onchange="rvChonAnh(this, 'KHAC')"></label>
+            </div>
+            <div id="rvAnhBox" class="rv-anh-box mb-2"></div>
             <div class="rv-note">🛠️ <b>Nguyên nhân & đối sách 4M</b> lập sau khi lưu: bấm <b>“💾 Lưu & lập đối sách 4M”</b>, hoặc bấm nút đối sách trong danh sách. Phần mềm tự báo nếu lỗi này đã từng xảy ra trên cùng khuôn.</div>
           </div>
           <div class="modal-footer py-2">
@@ -353,7 +455,8 @@ function rvMoForm(idx) {
     document.getElementById('rvMoldHint').textContent = '';
     setv('rvSlLo', r.slLo); setv('rvSlTra', r.slTra); setv('rvLoaiLoi', r.loaiLoi); setv('rvMoTa', r.moTa);
     setv('rvXuLy', r.xuLy); setv('rvSlDat', r.slDat); setv('rvSlHuy', r.slHuy); setv('rvTtHang', r.ttHang || 'Chờ xử lý'); setv('rvXuLyNote', r.xuLyNote);
-    rvDoiNguon(); rvTyLe();
+    rvAnhCho = []; rvAnhXoa = [];
+    rvDoiNguon(); rvTyLe(); rvVeAnhForm();
     if (!rvModalInstance) rvModalInstance = new bootstrap.Modal(document.getElementById('rvModal'));
     rvModalInstance.show();
 }
@@ -385,6 +488,10 @@ async function rvLuu(moDoiSach) {
     let cu = rvEditing ? ((traVeStore[rvEditing.date] || {})[rvEditing.id] || {}) : {};
     rec.t = cu.t || Date.now();
     rec.nguoiNhap = cu.nguoiNhap || ((currentUser && currentUser.email) || '').split('@')[0];
+    let anhGiu = {};
+    rvDsAnh(cu).forEach(([aid, a]) => { if (!rvAnhXoa.includes(aid)) anhGiu[aid] = a; });
+    if (Object.keys(anhGiu).length) rec.anh = anhGiu;
+    let anhMoi = rvAnhCho.slice();
     Object.keys(rec).forEach(k => { if (rec[k] === '') delete rec[k]; });
 
     try {
@@ -410,7 +517,9 @@ async function rvLuu(moDoiSach) {
         return;
     }
     if (rvModalInstance) rvModalInstance.hide();
+    rvAnhCho = []; rvAnhXoa = [];
     rvToast(isNew ? '✅ Đã lưu lỗi trả về.' : '✅ Đã cập nhật.');
+    if (anhMoi.length) rvLuuAnh(ngay, id, rec, anhMoi).then(() => renderTraVe());
     if (isNew && rec.nguon === 'KH' && typeof sendZaloAlert === 'function') {
         sendZaloAlert(`🚚 KHÁCH HÀNG TRẢ VỀ\n📅 Nhận: ${ngay}${rec.benTra ? ' · KH: ' + rec.benTra : ''}\n📦 ${rec.maHang}${rec.tenSP ? ' – ' + rec.tenSP : ''}${rec.order ? ' · ' + rec.order : ''}\n🏭 ${rec.may || '-'} ${rec.ca || ''}${rec.ngaySX ? ' · SX ' + rec.ngaySX : ''}\n❌ ${qcTenLoaiLoi(rec.loaiLoi)}: ${rec.slTra}${rec.slLo ? '/' + rec.slLo : ''} sp${rec.moTa ? '\n📝 ' + rec.moTa : ''}\n👤 ${rec.nguoiNhap}`, ngay);
     }
@@ -463,7 +572,8 @@ function rvXuatExcel() {
             'Nguyên Nhân Gốc': ds.nguyenNhan || '',
             '4M - Con Người': ds.man || '', '4M - Thiết Bị': ds.machine || '', '4M - Vật Tư': ds.material || '', '4M - Thao Tác': ds.method || '',
             'Đánh Giá Lặp Lại': ds.danhGiaLapLai || '', 'Người Phụ Trách': ds.phuTrach || '', 'Hạn': ds.hanXuLy || '',
-            'Trạng Thái Đối Sách': it.doiSach ? (ds.trangThai || '') : 'Chưa lập đối sách'
+            'Trạng Thái Đối Sách': it.doiSach ? (ds.trangThai || '') : 'Chưa lập đối sách',
+            'Link Ảnh': rvDsAnh(r).map(([, a]) => a.url).filter(Boolean).join(' \n')
         };
     });
     let ws = XLSX.utils.json_to_sheet(rows), wb = XLSX.utils.book_new();
