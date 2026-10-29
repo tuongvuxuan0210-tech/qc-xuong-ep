@@ -173,6 +173,20 @@
         }
 
 
+        // Loại nhựa / màu nhựa theo khuôn – lấy từ danh mục khuôn PM ép nhựa (mold.resinType, mold.colorCode)
+        function getMesMoldResin(moldId) {
+            if (!moldId || !moldCatalog) return { resinType: '', resinColor: '' };
+            let target = String(moldId).trim().toLowerCase();
+            let list = Array.isArray(moldCatalog) ? moldCatalog : Object.values(moldCatalog);
+            let found = list.find(m => m && ((m.id && String(m.id).trim().toLowerCase() === target) || (m.moldId && String(m.moldId).trim().toLowerCase() === target)));
+            if (!found) return { resinType: '', resinColor: '' };
+            return {
+                resinType: String(found.resinType || '').trim(),
+                resinColor: String(found.colorCode || found.resinColor || '').trim()
+            };
+        }
+
+
         function updateMoldDatalist() {
             let datalist = document.getElementById("moldOptionsList");
             if (!datalist) return;

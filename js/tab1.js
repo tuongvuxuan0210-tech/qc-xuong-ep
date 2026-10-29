@@ -198,7 +198,14 @@
             if (!moldId) return { resinType: '', resinColor: '' };
             let cleanId = String(moldId).trim();
             let safeKey = getSafeFirebaseKey(cleanId);
-            return moldResinStore[cleanId] || moldResinStore[safeKey] || { resinType: '', resinColor: '' };
+            let local = moldResinStore[cleanId] || moldResinStore[safeKey] || {};
+            // Ưu tiên dữ liệu khuôn từ PM ép nhựa; trường nào MES để trống thì dùng giá trị QC đã lưu
+            let mes = (typeof getMesMoldResin === 'function') ? getMesMoldResin(cleanId) : {};
+            return {
+                resinType: mes.resinType || local.resinType || '',
+                resinColor: mes.resinColor || local.resinColor || '',
+                fromMes: { type: !!mes.resinType, color: !!mes.resinColor }
+            };
         }
 
 
@@ -347,9 +354,18 @@
                         rec.hmiDetails = getHmiPresetForMold(moldSrc.mold) || getDefaultHmiPresetForMold(moldSrc.mold);
                     }
 
-                    let moldResin = getMoldResinSpecs(rec.moldId || autoMold);
-                    if (moldResin.resinType && (!currentRec || !currentRec.resinType)) rec.resinType = moldResin.resinType;
-                    if (moldResin.resinColor && (!currentRec || !currentRec.resinColor)) rec.resinColor = moldResin.resinColor;
+                    let moldResin = getMoldResinSpecs(rec.moldId);
+                    let resinFromMes = moldResin.fromMes || {};
+                    if (!rec.moldId) {
+                        // máy không chạy -> không hiển thị nhựa mặc định
+                        rec = { ...rec, resinType: '', resinColor: '' };
+                    } else {
+                        // Có dữ liệu từ PM ép nhựa -> luôn theo PM (ghi đè giá trị cũ / mặc định PP-Trắng)
+                        if (resinFromMes.type || (moldResin.resinType && (!currentRec || !currentRec.resinType))) rec = { ...rec, resinType: moldResin.resinType };
+                        if (resinFromMes.color || (moldResin.resinColor && (!currentRec || !currentRec.resinColor))) rec = { ...rec, resinColor: moldResin.resinColor };
+                    }
+                    let resinDefType = rec.moldId ? 'PP' : '', resinDefColor = rec.moldId ? 'Trắng' : '';
+                    let resinRoAttr = (on) => on ? ' readonly tabindex="-1" title="Lấy tự động từ danh mục khuôn PM ép nhựa"' : '';
 
                     let shiftIcon = shift === 'Ca Ngày' ? '☀️' : '🌙';
                     let moldCheckBadgeClass = rec.moldCheckOverall === 'NG' ? 'btn-3d-ruby' : 'btn-3d-emerald';
@@ -426,8 +442,8 @@
                             🛠️ ${escapeHtml(rec.moldCheckOverall || 'OK')}
                         </button>
                     </td>
-                    <td><input type="text" class="form-control form-control-sm text-center t1-resin" value="${escapeHtml(rec.resinType || 'PP')}" oninput="onTab1ResinChange('${key}', 'type', this.value)"></td>
-                    <td><input type="text" class="form-control form-control-sm text-center t1-color" value="${escapeHtml(rec.resinColor || 'Trắng')}" oninput="onTab1ResinChange('${key}', 'color', this.value)"></td>
+                    <td><input type="text" class="form-control form-control-sm text-center t1-resin" value="${escapeHtml(rec.resinType || resinDefType)}"${resinRoAttr(resinFromMes.type)} oninput="onTab1ResinChange('${key}', 'type', this.value)"></td>
+                    <td><input type="text" class="form-control form-control-sm text-center t1-color" value="${escapeHtml(rec.resinColor || resinDefColor)}"${resinRoAttr(resinFromMes.color)} oninput="onTab1ResinChange('${key}', 'color', this.value)"></td>
                     <td>${hmiCellHtml}</td>
                     <td class="text-center align-middle" style="padding: 3px 2px !important;"><input type="number" step="0.1" class="form-control form-control-sm qc-cycle-input qc-cycle-deco t1-deco-cycle" value="${rec.decoCycle || 30}" readonly title="Chu kỳ Deco chuẩn: ${rec.decoCycle || 30}s"></td>
                     <td class="text-center align-middle" style="padding: 3px 2px !important;"><input type="number" step="0.1" class="form-control form-control-sm qc-cycle-input qc-cycle-machine t1-machine-cycle" value="${rec.machineCycle !== undefined && rec.machineCycle !== null && rec.machineCycle !== '' ? rec.machineCycle : (rec.decoCycle || 30)}" title="Chu kỳ Máy thực tế (có thể chỉnh sửa)"></td>
