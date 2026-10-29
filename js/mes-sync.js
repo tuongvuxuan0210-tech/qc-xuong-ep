@@ -2,60 +2,62 @@
  * QC System - Đồng bộ mã khuôn / danh mục khuôn từ Phần mềm Quản lý Ép Nhựa (MES)
  * Xưởng Ép Nhựa Hải Tân
  *
- * Từ 11/10/2026 phần mềm ép nhựa (quanlyepnhua.netlify.app) đã chuyển dữ liệu sang
- * Cloud Firestore của dự án Firebase "haitan1" (collection mes_nodes). Dữ liệu cũ trên
- * Realtime Database "haithien" không còn được cập nhật nên QC không thấy mã khuôn mới.
+ * LỊCH SỬ NGUỒN DỮ LIỆU CỦA MES (quanlyepnhua.netlify.app):
+ *   - Trước 11/10/2026: Realtime Database "haithien"
+ *   - 11/10 -> 13/10/2026: Cloud Firestore "haitan1" (collection mes_nodes)
+ *   - Từ 13/10/2026: SUPABASE (project xxpagqtvkyrmtvozopah) – Firestore "haitan1" KHÔNG còn
+ *     được cập nhật, nên QC vẫn báo "đồng bộ" nhưng mã khuôn đứng yên ở dữ liệu cũ.
  *
- * Module này CHỈ ĐỌC 2 nhánh từ MES:
+ * Module này CHỈ ĐỌC 2 node từ MES qua RPC Supabase "mes_read_nodes":
  *   - mold_prod_v12_mes_clean   : nhật ký sản lượng -> mã khuôn đang chạy theo ngày/máy/ca
  *   - mold_catalog_v12_mes_clean: cấu hình khuôn -> chu kỳ, danh sách mã khuôn
- * Cấu trúc dữ liệu giữ nguyên như trước (ngày -> số máy "1".."21" -> [{shift, moldId}]),
- * nên các hàm cũ (getRunningMoldFromProd, getDecoCycleByMoldId...) dùng lại được.
- *
- * Định dạng lưu của MES: mes_nodes/{key} là manifest
- *   { format:'mes-json-segments-v1', present, byteLength, segmentCount, revision, updatedAt }
- * và mes_nodes/{key}/segments/{000000..} có trường "data" (Bytes) = các đoạn JSON UTF-8.
+ * Kết quả RPC: { [key]: { revision, value } } – value giữ nguyên cấu trúc cũ
+ * (ngày -> số máy "1".."21" -> [{shift, moldId}]), nên các hàm getRunningMoldFromProd,
+ * qcResolveMold, getDecoCycleByMoldId... dùng lại được.
+ * Kiểm tra thay đổi bằng RPC "mes_versions" (chỉ trả về số revision, rất nhẹ) mỗi 30 giây.
  */
 
-// Cấu hình web công khai của phần mềm ép nhựa (không phải mật khẩu; quyền đọc vẫn cần đăng nhập)
-const MES_FIREBASE_CONFIG = {
-    apiKey: "AIzaSyD5fR0Lol9Oqt9IOnmZubDxJhcfJC9ho9c",
-    authDomain: "haitan1.firebaseapp.com",
-    projectId: "haitan1",
-    storageBucket: "haitan1.firebasestorage.app",
-    messagingSenderId: "510503990739",
-    appId: "1:510503990739:web:967aacff806e774f1f2b26"
-};
-const MES_NODE_COLLECTION = 'mes_nodes';
-const MES_SEGMENT_FORMAT = 'mes-json-segments-v1';
+// Cấu hình công khai của MES (publishable key – không phải mật khẩu; quyền đọc vẫn cần đăng nhập)
+const MES_SUPABASE_URL = 'https://xxpagqtvkyrmtvozopah.supabase.co';
+const MES_SUPABASE_KEY = 'sb_publishable_gCvhq5HORR7SqulpO7gNNg_YfV8Lmh4';
 const MES_KEY_PROD = 'mold_prod_v12_mes_clean';
 const MES_KEY_CATALOG = 'mold_catalog_v12_mes_clean';
+const MES_KEYS = [MES_KEY_PROD, MES_KEY_CATALOG];
+const MES_POLL_MS = 30000;
 
-let mesApp = null, mesAuth = null, mesFs = null;
+let mesClient = null;
+let mesUser = null;
 let mesSyncActive = false;          // true khi đã nạp được dữ liệu sản xuất từ MES (chặn dữ liệu RTDB cũ ghi đè)
 let mesCatalogActive = false;
-let mesUnsubs = [];
-let mesFingerprints = {};
+let mesRevisions = {};
+let mesPollTimer = null;
+let mesRunning = false;
+let mesBusy = false;
 let mesAuthReady = false;
 let mesAutoLoginTried = false;
 let mesState = { status: 'off', message: '', lastSync: null };
 let mesConnectModalInstance = null;
 
 function mesInit() {
-    if (mesApp) return true;
-    if (typeof firebase === 'undefined' || !firebase.initializeApp || typeof firebase.firestore !== 'function') {
-        mesSetState('error', 'Thiếu thư viện Firestore');
+    if (mesClient) return true;
+    const sdk = window.supabase;
+    if (!sdk || typeof sdk.createClient !== 'function') {
+        mesSetState('error', 'Thiếu thư viện Supabase');
         return false;
     }
     try {
-        mesApp = (firebase.apps || []).find(a => a.name === 'mes') || firebase.initializeApp(MES_FIREBASE_CONFIG, 'mes');
-        mesAuth = mesApp.auth();
-        mesFs = mesApp.firestore();
-        try { mesAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); } catch (e) {}
-        mesAuth.onAuthStateChanged(user => {
+        mesClient = sdk.createClient(MES_SUPABASE_URL, MES_SUPABASE_KEY, {
+            auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storageKey: 'qc-mes-supabase-auth' }
+        });
+        mesClient.auth.onAuthStateChange((event, session) => {
+            const user = session ? session.user : null;
+            const changed = (user && user.id) !== (mesUser && mesUser.id);
+            mesUser = user;
             mesAuthReady = true;
             if (user) {
-                mesStartListeners();
+                if (changed) { mesStopListeners(); }
+                // tránh gọi RPC ngay trong callback auth (supabase-js khuyến cáo)
+                setTimeout(mesStartListeners, 0);
             } else {
                 mesStopListeners();
                 if (typeof currentUser !== 'undefined' && currentUser) mesTryAutoLogin();
@@ -73,14 +75,14 @@ function mesInit() {
 // Gọi khi tài khoản QC đã đăng nhập
 function mesKhoiDong() {
     if (!mesInit()) return;
-    if (mesAuth.currentUser) mesStartListeners();
+    if (mesUser) mesStartListeners();
     else if (mesAuthReady) mesTryAutoLogin();
-    // nếu chưa sẵn sàng, onAuthStateChanged sẽ tự xử lý
+    // nếu chưa sẵn sàng, onAuthStateChange (INITIAL_SESSION) sẽ tự xử lý
 }
 
 // Thử đăng nhập MES bằng chính tài khoản QC đã lưu (nếu tài khoản trùng nhau)
 async function mesTryAutoLogin() {
-    if (!mesAuth || mesAuth.currentUser) return;
+    if (!mesClient || mesUser) return;
     if (mesAutoLoginTried) { mesSetState('need_login', ''); return; }
     mesAutoLoginTried = true;
     let saved = null;
@@ -88,7 +90,8 @@ async function mesTryAutoLogin() {
     if (!saved || !saved.email || !saved.pwd) { mesSetState('need_login', ''); return; }
     try {
         mesSetState('connecting', '');
-        await mesAuth.signInWithEmailAndPassword(saved.email, atob(saved.pwd));
+        const { error } = await mesClient.auth.signInWithPassword({ email: saved.email, password: atob(saved.pwd) });
+        if (error) throw error;
     } catch (e) {
         mesSetState('need_login', '');
     }
@@ -96,72 +99,74 @@ async function mesTryAutoLogin() {
 
 // Gọi sau khi người dùng đăng nhập QC thành công bằng form
 function mesThuDangNhap(email, pwd) {
-    if (!mesInit() || mesAuth.currentUser) return;
+    if (!mesInit() || mesUser) return;
     mesAutoLoginTried = true;
     mesSetState('connecting', '');
-    mesAuth.signInWithEmailAndPassword(email, pwd).catch(() => mesSetState('need_login', ''));
+    mesClient.auth.signInWithPassword({ email, password: pwd })
+        .then(({ error }) => { if (error) mesSetState('need_login', ''); })
+        .catch(() => mesSetState('need_login', ''));
 }
 
 function mesDangXuat() {
     mesStopListeners();
     mesAutoLoginTried = false;
     mesSyncActive = false; mesCatalogActive = false;
-    if (mesAuth && mesAuth.currentUser) { try { mesAuth.signOut(); } catch (e) {} }
+    if (mesClient && mesUser) { try { mesClient.auth.signOut(); } catch (e) {} }
     mesSetState('off', '');
 }
 
 function mesStopListeners() {
-    mesUnsubs.forEach(u => { try { u(); } catch (e) {} });
-    mesUnsubs = [];
-    mesFingerprints = {};
+    mesRunning = false;
+    if (mesPollTimer) { clearInterval(mesPollTimer); mesPollTimer = null; }
+    mesRevisions = {};
 }
 
 function mesStartListeners() {
-    if (mesUnsubs.length || !mesFs) return;
+    if (mesRunning || !mesClient || !mesUser) return;
+    mesRunning = true;
     mesSetState('connecting', '');
-    [MES_KEY_PROD, MES_KEY_CATALOG].forEach(key => {
-        const ref = mesFs.collection(MES_NODE_COLLECTION).doc(key);
-        const unsub = ref.onSnapshot(snap => mesHandleManifest(key, ref, snap), err => {
-            console.warn('PM ép nhựa - lỗi đọc', key, err);
-            const denied = String(err.code || '').includes('permission');
-            mesSetState('error', denied ? 'Tài khoản không có quyền đọc dữ liệu PM ép nhựa' : (err.message || 'Lỗi kết nối'));
-        });
-        mesUnsubs.push(unsub);
-    });
+    mesRefresh(true);
+    mesPollTimer = setInterval(() => mesRefresh(false), MES_POLL_MS);
 }
 
-function mesDecode(manifest, segmentDatas) {
-    if (!manifest || manifest.format !== MES_SEGMENT_FORMAT) throw new Error('Sai định dạng dữ liệu MES');
-    if (!manifest.present) return null;
-    if (segmentDatas.length !== manifest.segmentCount) throw new Error('Thiếu phần dữ liệu MES');
-    const bytes = new Uint8Array(manifest.byteLength);
-    let offset = 0;
-    segmentDatas.forEach(d => {
-        const part = d && d.toUint8Array ? d.toUint8Array() : d;
-        bytes.set(part, offset); offset += part.length;
-    });
-    if (offset !== manifest.byteLength) throw new Error('Kích thước dữ liệu MES không khớp');
-    return JSON.parse(new TextDecoder('utf-8').decode(bytes));
+function mesRpcError(error) {
+    const msg = String((error && (error.message || error.code)) || error || 'Lỗi kết nối');
+    if (/permission|denied|42501|not authorized|jwt/i.test(msg)) return 'Tài khoản không có quyền đọc dữ liệu PM ép nhựa';
+    return msg;
 }
 
-async function mesHandleManifest(key, ref, snap, lanThu) {
-    if (!snap.exists) return;
-    const man = snap.data();
-    const fp = JSON.stringify([man.revision, man.byteLength, man.segmentCount, man.present]);
-    if (mesFingerprints[key] === fp && !lanThu) return;
+// Đọc lại các node có revision thay đổi (lần đầu: đọc tất cả)
+async function mesRefresh(full) {
+    if (!mesRunning || mesBusy || document.hidden && !full) return;
+    mesBusy = true;
     try {
-        const segs = await Promise.all(Array.from({ length: man.segmentCount || 0 }, (_, i) =>
-            ref.collection('segments').doc(String(i).padStart(6, '0')).get()));
-        if (segs.some(s => !s.exists)) throw new Error('Thiếu phần dữ liệu MES');
-        const value = mesDecode(man, segs.map(s => s.data().data));
-        mesFingerprints[key] = fp;
-        mesApply(key, value);
+        let keys = MES_KEYS;
+        if (!full && Object.keys(mesRevisions).length) {
+            const { data: st, error } = await mesClient.rpc('mes_versions', { p_keys: MES_KEYS });
+            if (error) throw error;
+            const versions = (st && st.versions) || {};
+            keys = MES_KEYS.filter(k => versions[k] === undefined || String(versions[k] && versions[k].revision !== undefined ? versions[k].revision : versions[k]) !== String(mesRevisions[k]));
+            if (!keys.length) { mesSetState('ok', ''); return; }
+        }
+        const { data, error } = await mesClient.rpc('mes_read_nodes', { p_keys: keys });
+        if (error) throw error;
+        if (!mesRunning) return;
+        keys.forEach(k => {
+            const node = data && data[k];
+            if (!node || !Object.prototype.hasOwnProperty.call(node, 'value')) return;
+            mesRevisions[k] = node.revision;
+            mesApply(k, node.value);
+        });
+        mesSetState('ok', '');
     } catch (e) {
-        // Có thể đọc đúng lúc MES đang ghi -> thử lại 1 lần sau 2 giây
-        if (!lanThu) setTimeout(() => ref.get().then(s => mesHandleManifest(key, ref, s, 1)), 2000);
-        else { console.warn('PM ép nhựa - không giải mã được', key, e); mesSetState('error', e.message); }
+        console.warn('PM ép nhựa - lỗi đọc dữ liệu', e);
+        mesSetState('error', mesRpcError(e));
+    } finally {
+        mesBusy = false;
     }
 }
+
+document.addEventListener('visibilitychange', () => { if (!document.hidden && mesRunning) mesRefresh(false); });
 
 function mesApply(key, value) {
     if (key === MES_KEY_PROD) {
@@ -172,7 +177,6 @@ function mesApply(key, value) {
         mesCatalogActive = true;
         if (typeof updateMoldDatalist === 'function') updateMoldDatalist();
     }
-    mesSetState('ok', '');
     if (typeof isEditMode !== 'undefined' && isEditMode) {
         if (typeof debouncedRenderTab1 === 'function') debouncedRenderTab1();
         if (typeof debouncedRenderTab2 === 'function') debouncedRenderTab2();
@@ -191,8 +195,8 @@ function mesSetState(status, message) {
     let html = '';
     if (status === 'ok') {
         const t = mesState.lastSync.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-        const email = mesAuth && mesAuth.currentUser ? mesAuth.currentUser.email : '';
-        html = `<span class="badge bg-success rounded-pill px-3 py-2 small shadow-sm" title="Mã khuôn đang lấy trực tiếp từ PM ép nhựa (tài khoản ${escapeHtml(email)}). Bấm để đổi tài khoản." style="cursor:pointer;" onclick="mesMoKetNoi()">🔗 Mã khuôn: đồng bộ PM Ép Nhựa (${t})</span>`;
+        const email = mesUser ? mesUser.email : '';
+        html = `<span class="badge bg-success rounded-pill px-3 py-2 small shadow-sm" title="Mã khuôn đang lấy trực tiếp từ PM ép nhựa (Supabase, tài khoản ${escapeHtml(email)}). Bấm để đổi tài khoản." style="cursor:pointer;" onclick="mesMoKetNoi()">🔗 Mã khuôn: đồng bộ PM Ép Nhựa (${t})</span>`;
     } else if (status === 'connecting') {
         html = `<span class="badge bg-info text-dark rounded-pill px-3 py-2 small shadow-sm">⏳ Đang kết nối PM Ép Nhựa...</span>`;
     } else if (status === 'need_login') {
@@ -234,7 +238,7 @@ function mesMoKetNoi() {
         </div>`;
         document.body.appendChild(div.firstElementChild);
     }
-    const cur = mesAuth.currentUser;
+    const cur = mesUser;
     document.getElementById('mesConnectCurrent').textContent = cur ? `Đang kết nối bằng: ${cur.email}` : '';
     document.getElementById('mesBtnDisconnect').classList.toggle('d-none', !cur);
     document.getElementById('mesConnectError').classList.add('d-none');
@@ -254,8 +258,9 @@ async function mesKetNoi() {
     if (!email || !pwd) { errEl.textContent = '⚠️ Nhập đủ email và mật khẩu'; errEl.classList.remove('d-none'); return; }
     btn.disabled = true; btn.textContent = '⏳...';
     try {
-        if (mesAuth.currentUser) { mesStopListeners(); await mesAuth.signOut(); }
-        await mesAuth.signInWithEmailAndPassword(email, pwd);
+        if (mesUser) { mesStopListeners(); await mesClient.auth.signOut(); }
+        const { error } = await mesClient.auth.signInWithPassword({ email, password: pwd });
+        if (error) throw error;
         try { localStorage.setItem('qc_mes_saved_email', email); } catch (e) {}
         mesConnectModalInstance.hide();
     } catch (e) {
