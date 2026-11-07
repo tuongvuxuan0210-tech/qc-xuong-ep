@@ -24,6 +24,7 @@
                 let inM = parseInt(input.getAttribute('data-machine'));
                 if (inM >= startM && inM <= endM) {
                     if (input.value !== value) input.value = value;
+                    qcMarkDirty(input, false);
                 }
             });
         }
@@ -39,6 +40,7 @@
             let before = JSON.parse(JSON.stringify(dayData));
 
             document.querySelectorAll('.t2-shift-inspector').forEach(input => {
+                if (!qcIsDirty(input)) return; // chỉ ô tên QC người dùng vừa nhập
                 let shiftKey = input.getAttribute('data-shiftkey');
                 let shift = input.getAttribute('data-shift');
                 let inM = parseInt(input.getAttribute('data-machine'));
@@ -50,6 +52,7 @@
 
             let rows = document.querySelectorAll('#tab2Tbody tr');
             rows.forEach(tr => {
+                if (tr.dataset.dirty !== '1') return; // chỉ dòng người dùng trên máy này vừa nhập
                 let moldEl = tr.querySelector('.t2-mold');
                 if (moldEl) {
                     let key = moldEl.getAttribute('data-key');
@@ -418,21 +421,28 @@
 
             // 1. TẢI DỮ LIỆU CLOUD MỚI NHẤT ĐỂ BẢO VỆ CHỐNG GHI ĐÈ / MẤT DỮ LIỆU TỪ MÁY KHÁC
             let cloudData = {};
-            if (isConnected && db) {
-                try {
-                    let snap = await db.ref(`qc_tab2_store_v1/${date}`).once('value');
-                    cloudData = snap.val() || {};
-                } catch(e) { console.warn("Lỗi tải cloud snapshot:", e); }
+            if (!isConnected || !db) {
+                alert("⚠️ Không thể kết nối tới Firebase Database. Vui lòng kiểm tra mạng hoặc đăng nhập lại!");
+                return;
+            }
+            try {
+                let snap = await db.ref(`qc_tab2_store_v1/${date}`).once('value');
+                cloudData = snap.val() || {};
+            } catch(e) {
+                console.warn("Lỗi tải cloud snapshot:", e);
+                alert("⚠️ Không tải được dữ liệu mới nhất trên cloud nên CHƯA lưu (tránh ghi đè số liệu của máy khác). Vui lòng thử lại.");
+                return;
             }
 
-            // Hợp nhất dữ liệu hiện có trong bộ nhớ và cloud làm nền tảng (Base)
-            let dayData = { ...cloudData, ...(tab2Store[date] || {}) };
+            // Nền = dữ liệu cloud MỚI NHẤT; chỉ chồng lên các ô người dùng trên máy này đã thực sự nhập.
+            // (Trước đây lấy toàn bộ bộ nhớ máy này đè lên cloud -> máy đang mở màn hình cũ bấm Lưu sẽ xóa số liệu máy khác.)
+            let dayData = mergeTabInputDrafts(2, date, cloudData);
 
             // 2. Lưu tên QC theo ca phân biệt Xưởng 1 (M1 - M10) và Xưởng 2 (M11 - M21)
             ['Ca Ngày', 'Ca Đêm'].forEach(shift => {
                 // Xưởng 1 (M1 - M10)
                 let inputX1 = document.querySelector(`.t2-shift-inspector[data-shift="${shift}"][data-workshop="XUONG1"]`);
-                if (inputX1) {
+                if (inputX1 && [...document.querySelectorAll(`.t2-shift-inspector[data-shift="${shift}"][data-workshop="XUONG1"]`)].some(qcIsDirty)) {
                     let valX1 = inputX1.value.trim();
                     dayData[`${shift}_XUONG1_inspector`] = valX1;
                     for (let m = 1; m <= 10; m++) {
@@ -442,7 +452,7 @@
 
                 // Xưởng 2 (M11 - M21)
                 let inputX2 = document.querySelector(`.t2-shift-inspector[data-shift="${shift}"][data-workshop="XUONG2"]`);
-                if (inputX2) {
+                if (inputX2 && [...document.querySelectorAll(`.t2-shift-inspector[data-shift="${shift}"][data-workshop="XUONG2"]`)].some(qcIsDirty)) {
                     let valX2 = inputX2.value.trim();
                     dayData[`${shift}_XUONG2_inspector`] = valX2;
                     for (let m = 11; m <= TOTAL_MACHINES; m++) {
@@ -454,6 +464,7 @@
             // 3. Quét các dòng đang hiển thị trên giao diện và ghi đè những ô người dùng vừa chỉnh sửa
             let rows = document.querySelectorAll('#tab2Tbody tr');
             rows.forEach(tr => {
+                if (tr.dataset.dirty !== '1') return; // chỉ dòng người dùng trên máy này vừa nhập
                 let moldEl = tr.querySelector('.t2-mold');
                 if (moldEl) {
                     let key = moldEl.getAttribute('data-key');
@@ -529,7 +540,7 @@
 
             if (isConnected && db) {
                 const savedPayload = cleanPayloadForFirebase(dayData);
-                db.ref(`qc_tab2_store_v1/${date}`).set(savedPayload)
+                db.ref(`qc_tab2_store_v1/${date}`).update(savedPayload)
                     .then(() => {
                         acknowledgeTabInputDrafts(2, date, savedPayload);
                         if (ngItemsTab2.length > 0) {

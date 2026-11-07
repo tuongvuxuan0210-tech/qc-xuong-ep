@@ -203,6 +203,25 @@
         }
 
 
+        // ===== Đánh dấu ô / dòng mà người dùng TRÊN MÁY NÀY thực sự vừa nhập =====
+        // Chỉ những dòng này mới được ghi vào bộ nhớ và lưu lên cloud. Các dòng khác giữ nguyên
+        // dữ liệu cloud, để màn hình cũ ở máy khác không ghi đè số liệu người khác vừa nhập.
+        function qcMarkDirty(el, rowToo) {
+            if (!el || !el.dataset) return;
+            el.dataset.dirty = '1';
+            if (rowToo !== false) {
+                let tr = el.closest ? el.closest('tr') : null;
+                if (tr) tr.dataset.dirty = '1';
+            }
+        }
+        function qcIsDirty(el) { return !!(el && el.dataset && el.dataset.dirty === '1'); }
+        ['input', 'change'].forEach(evt => document.addEventListener(evt, e => {
+            let t = e.target;
+            if (!t || !t.closest) return;
+            if (t.closest('#tab1Tbody') || t.closest('#tab2Tbody')) qcMarkDirty(t);
+        }, true));
+
+
         function rememberTabInputDrafts(tab, date, before, after) {
             const fields = tab === 1
                 ? ['moldId', 'resinType', 'resinColor', 'decoCycle', 'machineCycle', 'result', 'note']
