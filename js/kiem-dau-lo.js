@@ -3,13 +3,14 @@
  * Xưởng Ép Nhựa Hải Tân
  *
  * Theo mẫu giấy "BÁO CÁO KIỂM TRA KIỆN HÀNG ĐẦU TIÊN" – in khổ A5, ký tay sau khi in.
- *  - Phiếu tự tạo (trạng thái "chờ kiểm") khi: ĐẦU CA, LÊN KHUÔN (PM ép nhựa đổi mã khuôn), ĐỔI MÀU / LÔ LIỆU (màu đơn hàng đổi).
+ *  - Phiếu tự tạo (trạng thái "chờ kiểm") khi: LÊN KHUÔN (PM ép nhựa đổi mã khuôn so với ca trước hoặc trong ca),
+ *    ĐỔI MÀU / LÔ LIỆU (màu đơn hàng đổi). Không kiểm theo đầu ca.
  *    Sửa khuôn / chạy lại: bấm "➕ Tạo phiếu".
  *  - Phần sản xuất: lấy từ PM ép nhựa (danh mục khuôn + đơn hàng): khách hàng, mã đơn, tên SP, màu, nhựa.
  *  - Phần QC: Ngoại quan · Màu sắc · Kích thước (đo theo mẫu kích thước của khuôn) · Lắp ráp · Thông số máy (lấy kết quả Tab 6)
  *    + mục kiểm riêng của khuôn + ảnh.
  *  - Không đạt: gửi Zalo cảnh báo ngay, lập đối sách 4M (dùng chung phiếu 4M Tab 3), sau khi chỉnh máy tạo phiếu "Chạy lại".
- *  - Chặn Tab 2: máy chưa có phiếu ĐẠT cho khuôn đang chạy trong ca thì không nhập được kiểm 2 giờ.
+ *  - Chặn Tab 2: máy có phiếu của khuôn đang chạy mà phiếu mới nhất chưa ĐẠT thì không nhập được kiểm 2 giờ.
  *  - Nhắc Zalo: phiếu chưa kiểm quá 30 phút; phiếu không đạt chưa có đối sách 4M quá 30 phút.
  *
  * Firebase:
@@ -25,7 +26,7 @@ const FAI_HAN_PHUT = 30;
 const FAI_BAT_DAU_MAC_DINH = '2026-11-13';   // ngày bắt đầu áp dụng (trước ngày này không chặn Tab 2, không nhắc)
 
 const FAI_LY_DO = {
-    dau_ca:    { ten: 'Đầu ca',               zh: '' },
+    dau_ca:    { ten: 'Đầu ca',               zh: '', an: true },   // không dùng nữa – giữ để hiện phiếu cũ
     len_khuon: { ten: 'Lên khuôn',            zh: '' },
     doi_mau:   { ten: 'Đổi màu / đổi lô liệu', zh: '' },
     sua_khuon: { ten: 'Sửa khuôn',            zh: '' },
@@ -59,7 +60,20 @@ function faiNhom(m) { return typeof dkNhomTheoMay === 'function' ? dkNhomTheoMay
 function faiToSX(m) { return (parseInt(m) || 0) >= 11 ? 'Xưởng 1 (M11–M21)' : 'Xưởng 2 (M1–M10)'; }
 function faiSo(v) { let n = parseFloat(String(v === undefined || v === null ? '' : v).replace(',', '.')); return isNaN(n) ? NaN : n; }
 function faiKhoaMau(s) { return String(s || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ''); }
-function faiDsNgay(date) { let o = faiStore[date] || {}; return Object.keys(o).map(id => Object.assign({ id }, o[id])).filter(r => r && r.may); }
+function faiDsNgay(date) { let o = faiStore[date] || {}; return Object.keys(o).map(id => Object.assign({ id }, o[id])).filter(r => r && r.may && !r.daXoa); }
+// Lý do hiển thị trong danh sách chọn (bỏ "Đầu ca")
+function faiLyDoChon() { return Object.keys(FAI_LY_DO).filter(k => !FAI_LY_DO[k].an); }
+// Khuôn chạy gần nhất trên máy trước ca này (lùi tối đa 4 ca) – để biết đầu ca có phải vừa thay khuôn không
+function faiKhuonCaTruoc(date, ca, m) {
+    let d = date, c = ca;
+    for (let i = 0; i < 4; i++) {
+        if (c === 'Ca Ngày') { let x = new Date(d + 'T00:00:00'); x.setDate(x.getDate() - 1); d = dkISO(x); c = 'Ca Đêm'; }
+        else c = 'Ca Ngày';
+        let k = dkKhuonDangChay(d, m, c);
+        if (k) return k;
+    }
+    return '';
+}
 function faiDoc(p) { return db.ref(p).once('value').then(s => s.val() || {}); }
 function faiCa(date, ca) { let ht = dkCaHienTai(); return date === ht.date && ca === ht.ca; }
 
@@ -147,7 +161,7 @@ async function faiTaoPhieuTuDong(date, ca, m, mold, lyDo, mauDon, sinceMs) {
 function faiPhieuMoi(date, ca, m, mold, lyDo, tuDong) {
     let now = Date.now();
     let sx = faiThongTinSX(mold, m);
-    let stt = faiDsNgay(date).filter(r => parseInt(r.may) === parseInt(m)).length + 1;
+    let stt = Object.values(faiStore[date] || {}).filter(r => r && parseInt(r.may) === parseInt(m)).length + 1;
     let p = String(date).split('-');
     return {
         soPhieu: `FAI-${p[0].slice(2)}${p[1]}${p[2]}-M${m}-${String(stt).padStart(2, '0')}${tuDong ? '' : 'T'}`,
@@ -170,16 +184,23 @@ async function faiTick() {
         faiStore[date] = ds;
         let nhacCur = (await faiDoc(`${DK_PATH_NHAC}/${date}/cur`)) || {};
 
-        // (a) Tự tạo phiếu: đầu ca / lên khuôn / đổi màu
+        // (a) Tự tạo phiếu: lên khuôn (đổi khuôn trong ca, hoặc khuôn đầu ca khác khuôn ca trước) / đổi màu
         if (typeof mesSyncActive !== 'undefined' && mesSyncActive) {
             for (let m = 1; m <= TOTAL_MACHINES; m++) {
                 let mold = dkKhuonDangChay(date, m, ca);
                 if (!mold) continue;
                 let cur = nhacCur[`M${m}_${ca}`];
-                let lenKhuon = cur && cur.mold === mold && cur.prev;
                 let cuaKhuon = faiDsNgay(date).filter(r => parseInt(r.may) === m && r.ca === ca && r.moldId === mold);
+                let coPhieuXoa = Object.values(faiStore[date] || {}).some(r => r && r.daXoa && parseInt(r.may) === m && r.ca === ca && r.moldId === mold);
                 if (!cuaKhuon.length) {
-                    await faiTaoPhieuTuDong(date, ca, m, mold, lenKhuon ? 'len_khuon' : 'dau_ca', '', lenKhuon ? cur.since : ht.batDau);
+                    if (coPhieuXoa) continue;                                   // đã xóa phiếu của khuôn này -> không tạo lại
+                    let since = 0;
+                    if (cur && cur.mold === mold && cur.prev) since = cur.since;          // đổi khuôn giữa ca
+                    else {
+                        let truoc = faiKhuonCaTruoc(date, ca, m);
+                        if (truoc && truoc !== mold) since = ht.batDau;                     // đầu ca đã là khuôn mới
+                    }
+                    if (since) await faiTaoPhieuTuDong(date, ca, m, mold, 'len_khuon', '', since);
                     continue;
                 }
                 // Đổi màu: màu đơn hàng hiện tại khác màu ghi trên phiếu gần nhất
@@ -237,8 +258,7 @@ function faiLyDoChanTab2(date, m, ca, mold) {
     faiNghe(date);
     if (!faiStore[date]) return '';            // chưa tải xong -> không chặn nhầm
     let p = faiPhieuMoiNhat(date, m, ca, mold);
-    if (!p) return '🔒 Chưa có phiếu KIỂM HÀNG ĐẦU TIÊN (Tab 7)';
-    if (p.trangThai === 'dat') return '';
+    if (!p || p.trangThai === 'dat') return '';   // không thay khuôn -> không cần phiếu
     if (p.trangThai === 'khong_dat') return '🔒 Hàng đầu tiên KHÔNG ĐẠT – chỉnh máy rồi kiểm lại (Tab 7)';
     return '🔒 Chờ KIỂM HÀNG ĐẦU TIÊN (Tab 7)';
 }
@@ -262,7 +282,7 @@ function faiMoTuTab2(date, ca, m) {
     let mold = dkKhuonDangChay(date, m, ca);
     let p = faiPhieuMoiNhat(date, m, ca, mold);
     if (p && p.trangThai !== 'dat') faiMoPhieu(date, p.id);
-    else faiTaoPhieuTay(date, ca, m, 'dau_ca');
+    else faiTaoPhieuTay(date, ca, m, 'len_khuon');
 }
 
 // ===================== 5. GIAO DIỆN TAB 7 =====================
@@ -276,7 +296,7 @@ function faiRender() {
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
                 <div>
                     <h5 class="fw-bold text-info m-0">🧪 Kiểm Tra Kiện Hàng Đầu Tiên <span class="opacity-75">首件检查</span></h5>
-                    <div class="small opacity-75">Phiếu tự tạo khi đầu ca, lên khuôn, đổi màu. Máy chưa có phiếu ĐẠT thì Tab 2 bị khóa. Không đạt → Zalo + đối sách 4M. In A5, ký tay.</div>
+                    <div class="small opacity-75">Phiếu tự tạo khi thay khuôn (lên khuôn) và đổi màu; sửa khuôn / chạy lại bấm "Tạo phiếu". Phiếu chưa ĐẠT thì Tab 2 của máy bị khóa. Không đạt → Zalo + đối sách 4M. In A5, ký tay.</div>
                 </div>
                 <div class="d-flex flex-wrap gap-2">
                     <button type="button" class="btn btn-sm btn-3d-emerald px-3" onclick="faiTaoPhieuTay()">➕ Tạo phiếu</button>
@@ -341,6 +361,7 @@ function faiRender() {
                 <button type="button" class="btn btn-sm ${r.trangThai === 'cho' ? 'btn-3d-emerald' : 'btn-outline-info'} py-0 px-2" onclick="faiMoPhieu('${r.date}', '${r.id}')">${r.trangThai === 'cho' ? '📝 Kiểm' : '👁️ Xem'}</button>
                 <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="faiIn('${r.date}', '${r.id}')" title="In phiếu khổ A5">🖨️</button>
                 ${r.trangThai === 'khong_dat' ? `<button type="button" class="btn btn-sm btn-outline-danger py-0 px-2" onclick="faiMo4M('${r.date}', '${r.id}')" title="Đối sách 4M">4M</button>` : ''}
+                <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2" onclick="faiXoaPhieu('${r.date}', '${r.id}')" title="Xóa phiếu tạo nhầm">🗑️</button>
             </td></tr>`;
     }).join('');
     let tb = document.getElementById('faiTbody');
@@ -360,6 +381,17 @@ function faiDoiChan() {
         .catch(e => alert('❌ Không lưu được: ' + e.message));
 }
 
+// Xóa phiếu: chỉ đánh dấu daXoa (giữ dấu vết; phiếu tự tạo sẽ không bị tạo lại)
+function faiXoaPhieu(date, id) {
+    if (!checkAuthOrAlert() || !db) return;
+    let r = (faiStore[date] || {})[id];
+    if (!r) return;
+    let canhBao = r.trangThai !== 'cho' ? `\n⚠️ Phiếu này ĐÃ KIỂM (${r.trangThai === 'dat' ? 'ĐẠT' : 'KHÔNG ĐẠT'}) – xóa sẽ mất kết quả.` : '';
+    if (!confirm(`Xóa phiếu ${r.soPhieu} (M${r.may} · ${r.moldId})?${canhBao}`)) return;
+    db.ref(`${FAI_PATH}/${date}/${id}`).update({ daXoa: true, xoaBoi: (currentUser && currentUser.email) || '', xoaLuc: Date.now() })
+        .catch(e => alert('❌ Không xóa được: ' + e.message));
+}
+
 // ===================== 6. TẠO PHIẾU TAY =====================
 function faiTaoPhieuTay(date, ca, m, lyDo) {
     if (!checkAuthOrAlert() || !db) return;
@@ -377,7 +409,7 @@ function faiTaoPhieuTay(date, ca, m, lyDo) {
                 <option ${ca === 'Ca Ngày' ? 'selected' : ''}>Ca Ngày</option><option ${ca === 'Ca Đêm' ? 'selected' : ''}>Ca Đêm</option></select></div>
             <div class="col-6"><label class="small fw-bold">Máy</label><select class="form-select form-select-sm fw-bold" id="faiTMay" onchange="faiTGoiYKhuon()"><option value="">—</option>${mayOpts}</select></div>
             <div class="col-6"><label class="small fw-bold">Nguyên nhân đưa kiểm</label><select class="form-select form-select-sm" id="faiTLyDo">
-                ${Object.keys(FAI_LY_DO).map(k => `<option value="${k}" ${k === (lyDo || 'sua_khuon') ? 'selected' : ''}>${FAI_LY_DO[k].ten}</option>`).join('')}</select></div>
+                ${faiLyDoChon().map(k => `<option value="${k}" ${k === (lyDo || 'len_khuon') ? 'selected' : ''}>${FAI_LY_DO[k].ten}</option>`).join('')}</select></div>
             <div class="col-12"><label class="small fw-bold">Mã khuôn</label><input type="text" class="form-control form-control-sm fw-bold" id="faiTKhuon" list="moldOptionsList" placeholder="Tự lấy theo PM ép nhựa"></div>
         </div>`;
     bootstrap.Modal.getOrCreateInstance(el).show();
@@ -458,8 +490,10 @@ async function faiMoPhieu(date, id) {
         return `<tr data-muc="${m.ma}">
             <td class="text-start fw-bold small">${m.ten} <span class="opacity-75">${m.zh}</span></td>
             <td>${chonKq(m.ma, v, (m.ma === 'tsMay' && !faiDangSua.tsMayTay) || (m.ma === 'kt' && kichThuoc.length))}</td>
-            <td><input type="text" class="form-control form-control-sm fai-loi" data-muc="${m.ma}" value="${escapeHtml(loi)}" ${m.ma === 'tsMay' && !faiDangSua.tsMayTay ? 'readonly' : ''}
-                placeholder="${m.ma === 'tsMay' && faiDangSua.tsMayTay ? 'Khuôn chưa có bản điều kiện chuẩn – QC tự đánh giá' : 'Miêu tả lỗi (nếu có)'}"></td></tr>`;
+            <td><div class="input-group input-group-sm">
+                <input type="text" class="form-control form-control-sm fai-loi" data-muc="${m.ma}" value="${escapeHtml(loi)}" ${m.ma === 'tsMay' && !faiDangSua.tsMayTay ? 'readonly' : ''}
+                placeholder="${m.ma === 'tsMay' && faiDangSua.tsMayTay ? 'Khuôn chưa có bản điều kiện chuẩn – QC tự đánh giá' : 'Miêu tả lỗi (nếu có)'}">
+                ${m.ma === 'tsMay' && !faiDangSua.tsMayTay ? '' : faiNutAnh(m.ma)}</div></td></tr>`;
     };
     let dongKT = (k, i) => `<tr data-kt="${i}">
             <td class="text-start small fw-bold">${escapeHtml(k.ten || '')}</td>
@@ -469,7 +503,9 @@ async function faiMoPhieu(date, id) {
     let dongThem = (t, i) => `<tr data-them="${i}">
             <td class="text-start fw-bold small">${escapeHtml(t.ten || '')}</td>
             <td>${chonKq('them' + i, t.kq || '')}</td>
-            <td><input type="text" class="form-control form-control-sm fai-them-loi" data-i="${i}" value="${escapeHtml(t.loi || '')}" placeholder="Miêu tả lỗi"></td></tr>`;
+            <td><div class="input-group input-group-sm">
+                <input type="text" class="form-control form-control-sm fai-them-loi" data-i="${i}" value="${escapeHtml(t.loi || '')}" placeholder="Miêu tả lỗi">
+                ${faiNutAnh('them' + i)}</div></td></tr>`;
     let anhCu = faiDanhSach(qc.anh);
     faiDangSua.kichThuoc = kichThuoc;
     faiDangSua.them = them;
@@ -489,7 +525,7 @@ async function faiMoPhieu(date, id) {
             <div class="col-6 col-md-3"><label class="small fw-bold">Loại</label><select class="form-select form-select-sm fai-sx" data-f="loai">
                 <option value="TP" ${sx.loai !== 'BTP' ? 'selected' : ''}>Thành phẩm</option><option value="BTP" ${sx.loai === 'BTP' ? 'selected' : ''}>Bán thành phẩm</option></select></div>
             <div class="col-12 col-md-6"><label class="small fw-bold">Nguyên nhân đưa kiểm</label><select class="form-select form-select-sm" id="faiLyDo">
-                ${Object.keys(FAI_LY_DO).map(k => `<option value="${k}" ${k === rec.lyDo ? 'selected' : ''}>${FAI_LY_DO[k].ten}</option>`).join('')}</select></div>
+                ${faiLyDoChon().concat(FAI_LY_DO[rec.lyDo] && FAI_LY_DO[rec.lyDo].an ? [rec.lyDo] : []).map(k => `<option value="${k}" ${k === rec.lyDo ? 'selected' : ''}>${FAI_LY_DO[k].ten}</option>`).join('')}</select></div>
         </div>
         <div class="small fw-bold text-info mb-1">PHẦN QC</div>
         <table class="table table-bordered table-sm align-middle text-center mb-2">
@@ -502,10 +538,12 @@ async function faiMoPhieu(date, id) {
             <thead><tr><th class="text-start">Kích thước</th><th>Chuẩn</th><th style="width:110px;">Đo được</th><th></th></tr></thead>
             <tbody>${kichThuoc.map(dongKT).join('')}</tbody>
         </table>` : `<div class="small opacity-75 mb-2">Khuôn chưa có mẫu kích thước – bấm "📏 Mẫu kiểm theo khuôn" ở Tab 7 để thêm (đo số, tự báo OK/NG).</div>`}
-        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-            <label class="btn btn-sm btn-outline-info rounded-pill m-0" style="cursor:pointer;">📸 Thêm ảnh
-                <input type="file" accept="image/*" multiple style="display:none;" onchange="faiChonAnh(this)"></label>
-            <div class="d-flex flex-wrap gap-1" id="faiAnh"></div>
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-2 p-2 border border-info rounded-3">
+            <span class="small fw-bold">📸 Ảnh lỗi:</span>
+            <span class="small opacity-75">bấm 📷 trên dòng mục kiểm bị lỗi, hoặc</span>
+            <label class="btn btn-sm btn-outline-info rounded-pill m-0" style="cursor:pointer;">➕ Ảnh chung
+                <input type="file" accept="image/*" multiple style="display:none;" onchange="faiChonAnh(this, '')"></label>
+            <div class="d-flex flex-wrap gap-2 w-100" id="faiAnh"></div>
         </div>
         <div class="row g-2">
             <div class="col-12 col-md-8"><label class="small fw-bold">Ghi chú</label><textarea class="form-control form-control-sm" id="faiGhiChu" rows="2">${escapeHtml(qc.ghiChu || '')}</textarea></div>
@@ -573,21 +611,43 @@ function faiKetQua() {
 }
 
 // Ảnh
-async function faiChonAnh(input) {
+// Nút chụp ảnh lỗi trên từng dòng mục kiểm (máy điện thoại mở camera sau)
+function faiNutAnh(muc) {
+    return `<label class="btn btn-outline-danger fw-bold m-0 px-2" style="cursor:pointer;" title="Chụp / chọn ảnh lỗi cho mục này">📷<span class="fai-anh-dem ms-1" data-muc="${muc}"></span>
+        <input type="file" accept="image/*" capture="environment" multiple style="display:none;" onchange="faiChonAnh(this, '${muc}')"></label>`;
+}
+function faiTenMuc(muc) {
+    if (!muc) return 'Ảnh chung';
+    let m = FAI_MUC.find(x => x.ma === muc);
+    if (m) return m.ten;
+    let i = parseInt(String(muc).replace('them', '')), t = faiDangSua && faiDangSua.them && faiDangSua.them[i];
+    return t ? t.ten : muc;
+}
+async function faiChonAnh(input, muc) {
     let files = [...(input.files || [])].slice(0, 4);
     input.value = '';
     for (let f of files) {
-        try { faiAnhTam.push({ data: await compressImage(f) }); } catch (e) { alert('⚠️ Không đọc được ảnh: ' + e.message); }
+        try { faiAnhTam.push({ data: await compressImage(f), muc: muc || '' }); } catch (e) { alert('⚠️ Không đọc được ảnh: ' + e.message); }
+    }
+    // có ảnh lỗi ở mục nào thì tự chọn "Không đạt" cho mục đó (QC vẫn đổi lại được)
+    if (muc && files.length) {
+        let k = document.getElementById(`faiKq_${muc}_K`);
+        if (k && !k.disabled && !document.querySelector(`#faiModalBody input[name="faiKq_${muc}"]:checked`)) { k.checked = true; faiTinhKetLuan(); }
     }
     faiVeAnh();
 }
 function faiVeAnh() {
     let o = document.getElementById('faiAnh');
     if (!o || !faiDangSua) return;
-    let cu = (faiDangSua.anhCu || []).map((a, i) => `<button type="button" class="btn btn-sm btn-3d-primary py-0 px-2" onclick="previewDefectImage('${escapeHtml(a.url || a.file || '')}', 'Ảnh phiếu ${escapeHtml(faiDangSua.rec.soPhieu)}')">🖼️ Ảnh ${i + 1}</button>`);
-    let moi = faiAnhTam.map((a, i) => `<span class="position-relative"><img src="${a.data}" style="width:34px;height:34px;object-fit:cover;" class="rounded border border-info">
+    let dem = {};
+    (faiDangSua.anhCu || []).concat(faiAnhTam).forEach(a => { dem[a.muc || ''] = (dem[a.muc || ''] || 0) + 1; });
+    document.querySelectorAll('#faiModalBody .fai-anh-dem').forEach(sp => { let n = dem[sp.dataset.muc] || 0; sp.textContent = n ? n : ''; });
+    let cu = (faiDangSua.anhCu || []).map((a, i) => `<button type="button" class="btn btn-sm btn-3d-primary py-0 px-2" onclick="previewDefectImage('${escapeHtml(a.url || a.file || '')}', '${escapeHtml(faiTenMuc(a.muc))} – ${escapeHtml(faiDangSua.rec.soPhieu)}')">🖼️ ${escapeHtml(faiTenMuc(a.muc))}</button>`);
+    let moi = faiAnhTam.map((a, i) => `<span class="position-relative d-inline-flex flex-column align-items-center">
+        <img src="${a.data}" style="width:56px;height:56px;object-fit:cover;cursor:pointer;" class="rounded border border-danger" onclick="previewDefectImage(this.src, '${escapeHtml(faiTenMuc(a.muc))}')">
+        <small style="font-size:10px;max-width:64px;" class="text-truncate">${escapeHtml(faiTenMuc(a.muc))}</small>
         <button type="button" class="btn btn-sm btn-danger py-0 px-1 position-absolute top-0 start-100 translate-middle" style="font-size:9px;" onclick="faiAnhTam.splice(${i},1); faiVeAnh()">×</button></span>`);
-    o.innerHTML = cu.concat(moi).join('');
+    o.innerHTML = cu.concat(moi).join('') || '<span class="small opacity-75">Chưa có ảnh.</span>';
 }
 // Lưu ảnh lên Google Drive (như Tab 2) – trả về [{ file, url }]
 async function faiTaiAnhLen(rec, id) {
@@ -595,7 +655,7 @@ async function faiTaiAnhLen(rec, id) {
     for (let i = 0; i < faiAnhTam.length; i++) {
         let a = faiAnhTam[i];
         let file = `QC_FAI_M${rec.may}_${String(rec.moldId || 'KHUON').replace(/[^\w-]+/g, '_')}_${rec.date}_${id}_${Date.now()}_${i + 1}.jpg`;
-        let item = { file, url: '' };
+        let item = { file, url: '', muc: a.muc || '' };
         if (typeof ZALO_WEBHOOK_URL !== 'undefined' && ZALO_WEBHOOK_URL && !ZALO_WEBHOOK_URL.includes('URL_GOOGLE_APPS_SCRIPT')) {
             try {
                 let r = await fetch(ZALO_WEBHOOK_URL, {
@@ -794,7 +854,7 @@ td, th { border: 0.6pt solid #000; padding: 0.7mm 1.2mm; vertical-align: middle;
 <tr><td><span class="k">机台 / 模具编号</span><br>Máy số / Mã khuôn</td><td><b>M${r.may}</b> / ${e(r.moldId)}</td><td><span class="k">订单编号</span><br>Mã số đơn hàng</td><td>${e(sx.donHang)}</td></tr>
 <tr><td><span class="k">产品名称</span><br>Tên sản phẩm</td><td>${e(sx.tenSP)}${sx.mau || sx.nhua ? `<br><span class="k">Màu: ${e(sx.mau)} · Nhựa: ${e(sx.nhua)}</span>` : ''}</td><td><span class="k">送检数量</span><br>Số lượng đưa kiểm</td><td><b>${e(sx.slKiem)}</b></td></tr>
 <tr><td colspan="2"><span class="k">成品</span> Thành phẩm ${o(sx.loai !== 'BTP')} &nbsp;&nbsp; <span class="k">半成品</span> Bán thành phẩm ${o(sx.loai === 'BTP')}</td><td colspan="2"></td></tr>
-<tr><td><span class="k">送检原因</span><br>Nguyên nhân đưa kiểm</td><td colspan="3">${Object.keys(FAI_LY_DO).map(k => `${o(r.lyDo === k)} ${FAI_LY_DO[k].ten}`).join(' &nbsp; ')}</td></tr>
+<tr><td><span class="k">送检原因</span><br>Nguyên nhân đưa kiểm</td><td colspan="3">${faiLyDoChon().map(k => `${o(r.lyDo === k)} ${FAI_LY_DO[k].ten}`).join(' &nbsp; ')}</td></tr>
 <tr><td colspan="4" class="i">此部分由质检部分填写 – Hạng mục này dành cho bộ phận QC điền</td></tr>
 <tr><th>项目<br>Danh mục</th><th>检验项目<br>Mục kiểm tra</th><th style="width:15%;">判定<br>Nhận xét</th><th>不良描述<br>Miêu tả lỗi</th></tr>
 ${dongMuc.join('')}
