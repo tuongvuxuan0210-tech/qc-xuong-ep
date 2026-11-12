@@ -163,6 +163,7 @@ function dkDat(p, s, v) {
 function dkKhoiDong() {
     if (!isConnected || !db || !isEditMode) return;
     dkDungKhung();
+    if (typeof dkAiNghe === 'function') dkAiNghe();
     if (!dkBound) {
         dkBound = true;
         db.ref(DK_PATH_CHUAN).on('value', s => { dkChuan = s.val() || {}; dkRender(); },
@@ -394,10 +395,10 @@ function dkMoChuan(moldId, m) {
     let ds = dkDanhSachChuan();
     let mayOpts = '';
     for (let i = 1; i <= TOTAL_MACHINES; i++) mayOpts += `<option value="${i}" ${i === m ? 'selected' : ''}>M${i}</option>`;
-    let body = `
+    let body = `${typeof dkAiThanh === 'function' ? dkAiThanh('chuan') : ''}
         <div class="row g-2 mb-2">
             <div class="col-7 col-md-4"><label class="small fw-bold">Mã khuôn</label>
-                <input type="text" class="form-control form-control-sm fw-bold" id="dkCMold" list="moldOptionsList" value="${escapeHtml(moldId || '')}"></div>
+                <input type="text" class="form-control form-control-sm fw-bold" id="dkCMold" list="moldOptionsList" oninput="if (typeof dkDongBoMes === 'function') dkDongBoMes()" value="${escapeHtml(moldId || '')}"></div>
             <div class="col-5 col-md-2"><label class="small fw-bold">Số máy</label>
                 <select class="form-select form-select-sm fw-bold" id="dkCMay"><option value="">—</option>${mayOpts}</select></div>
             <div class="col-12 col-md-6"><label class="small fw-bold">Sao chép từ bản chuẩn khác</label>
@@ -441,6 +442,7 @@ function dkDienFormChuan(std) {
     body.querySelectorAll('.dk-c').forEach(i => { let t = ts[i.dataset.pid]; i.value = (t && t.c !== undefined && t.c !== null) ? t.c : ''; });
     body.querySelectorAll('.dk-d').forEach(i => { let t = ts[i.dataset.pid]; i.value = (t && t.d !== undefined && t.d !== null) ? t.d : ''; });
     body.querySelectorAll('.dk-kt').forEach(i => { let t = ts[i.dataset.pid], p = dkThongSo(i.dataset.pid); i.checked = (t && t.kt !== undefined) ? !!t.kt : !!(p && p.kt); });
+    if (typeof dkDongBoMes === 'function') dkDongBoMes();
 }
 function dkSaoChepChuan(i) {
     let x = dkDanhSachChuan()[parseInt(i)];
@@ -513,7 +515,7 @@ function dkMoKiemTra(date, ca, m) {
             <td><input type="text" inputmode="decimal" class="form-control form-control-sm text-center fw-bold dk-v" data-pid="${p.id}"
                 value="${vals[p.id] !== undefined ? vals[p.id] : ''}" oninput="dkCapNhatDong(this)"></td>
             <td class="dk-kq" style="width:44px;"></td></tr>`;
-    let html = `
+    let html = `${typeof dkAiThanh === 'function' ? dkAiThanh('kiem') : ''}
         <div class="row g-2 mb-2">
             <div class="col-7"><label class="small fw-bold">Tên QC kiểm</label>
                 <input type="text" class="form-control form-control-sm fw-bold" id="dkKTen" value="${escapeHtml(qcTen)}"></div>
