@@ -53,14 +53,17 @@
         }
 
 
-        async function sendZaloAlert(message, date) {
+        // nhom: 'X1' (Xưởng 1, M11-M21 -> Nhóm Quản lí và TT 2NM) | 'X2' (Xưởng 2, M1-M10 -> SẢN XUẤT XƯỞNG ÉP MỚI)
+        // Không truyền nhom -> webhook gửi vào nhóm mặc định như trước.
+        async function sendZaloAlert(message, date, nhom) {
             if (!ZALO_WEBHOOK_URL || ZALO_WEBHOOK_URL.includes("URL_GOOGLE_APPS_SCRIPT")) return false;
             let targetDate = date || document.getElementById('tab2Date')?.value || getTodayISO();
             try {
                 await fetch(ZALO_WEBHOOK_URL, {
                     method: "POST", mode: "no-cors",
                     headers: { "Content-Type": "text/plain;charset=utf-8" },
-                    body: JSON.stringify({ message: message, text: message, date: targetDate })
+                    body: JSON.stringify(Object.assign({ message: message, text: message, date: targetDate },
+                        nhom ? { nhom: nhom, group: nhom, tenNhom: (typeof DK_NHOM_ZALO !== 'undefined' && DK_NHOM_ZALO[nhom]) ? DK_NHOM_ZALO[nhom].nhom : '' } : {}))
                 });
                 return true;
             } catch (e) {
