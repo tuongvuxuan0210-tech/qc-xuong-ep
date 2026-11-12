@@ -7,6 +7,9 @@
 const DK_AI_PATH = 'system_config/ai_doc_anh';
 const DK_AI_MODEL = { claude: 'claude-sonnet-5-5', gemini: 'gemini-3.8-flash' };
 let dkAiCfg = null, dkAiBound = false;
+// Model Gemini dự phòng khi model chính quá tải (tên "-latest" là bí danh Google tự trỏ tới bản Flash mới nhất)
+const DK_AI_GEMINI_DU_PHONG = ['gemini-flash-latest', 'gemini-flash-lite-latest'];
+let dkAiBaoTien = () => {};   // hàm báo tiến trình, gán trong dkAiChonAnh
 
 // ===================== 1. ĐỒNG BỘ THÔNG TIN KHUÔN TỪ MES =====================
 function dkThongTinMes(moldId) {
@@ -149,7 +152,7 @@ Trả về DUY NHẤT một đối tượng JSON, không kèm chữ nào khác:
 {"gia_tri": {"<id>": <số>, ...}, "model_may": "<model máy nếu thấy, hoặc chuỗi rỗng>", "ghi_chu": "<ghi chú ngắn nếu có, hoặc chuỗi rỗng>"}`;
 }
 
-const DK_AI_HAN_GIAY = 90; // quá hạn này thì dừng chờ và báo lỗi
+const DK_AI_HAN_GIAY = 120; // quá hạn này thì dừng chờ và báo lỗi
 async function dkAiGoi(anh, cauHoi) {
     let ctl = new AbortController(), hen = setTimeout(() => ctl.abort(), DK_AI_HAN_GIAY * 1000);
     try { return await dkAiGoiCore(anh, cauHoi, ctl.signal); }
@@ -178,22 +181,40 @@ async function dkAiGoiCore(anh, cauHoi, signal) {
         if (!r.ok) throw new Error((j.error && j.error.message) || ('Claude API lỗi ' + r.status));
         text = (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
     } else {
-        let mg = String(cfg.model || DK_AI_MODEL.gemini);
-        let genCfg = { responseMimeType: 'application/json' };
-        // Tắt/giảm chế độ "suy nghĩ" của Gemini – đọc số trên ảnh không cần, mà làm chậm nhiều
-        if (/^gemini-2\.5-flash/.test(mg)) genCfg.thinkingConfig = { thinkingBudget: 0 };
-        else if (/^gemini-[3-9]/.test(mg)) genCfg.thinkingConfig = { thinkingLevel: 'low' };
-        let r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cfg.model || DK_AI_MODEL.gemini)}:generateContent`, {
-            method: 'POST', signal,
-            headers: { 'content-type': 'application/json', 'x-goog-api-key': cfg.key },
-            body: JSON.stringify({
-                contents: [{ parts: anh.map(d => ({ inline_data: { mime_type: 'image/jpeg', data: d } })).concat([{ text: cauHoi }]) }],
-                generationConfig: genCfg
-            })
-        });
-        let j = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error((j.error && j.error.message) || ('Gemini API lỗi ' + r.status));
-        text = (((j.candidates || [])[0] || {}).content || { parts: [] }).parts.map(p => p.text || '').join('');
+        // Model chính bị quá tải (503/429/500) -> chờ rồi thử lại, sau đó chuyển sang model dự phòng
+        let dsModel = [String(cfg.model || DK_AI_MODEL.gemini)];
+        DK_AI_GEMINI_DU_PHONG.forEach(x => { if (!dsModel.includes(x)) dsModel.push(x); });
+        let loiCuoi = null;
+        for (let mi = 0; mi < dsModel.length && !text; mi++) {
+            let mg = dsModel[mi];
+            for (let lan = 0; lan < (mi === 0 ? 2 : 1) && !text; lan++) {
+                if (lan > 0) { dkAiBaoTien(`Model ${mg} quá tải – thử lại...`); await new Promise(r => setTimeout(r, 3000)); }
+                if (mi > 0 && lan === 0) dkAiBaoTien(`Model chính quá tải – chuyển sang ${mg}...`);
+                let genCfg = { responseMimeType: 'application/json' };
+                // Tắt/giảm chế độ "suy nghĩ" của Gemini – đọc số trên ảnh không cần, mà làm chậm nhiều
+                if (/^gemini-2\.5-flash/.test(mg)) genCfg.thinkingConfig = { thinkingBudget: 0 };
+                else if (/^gemini-[3-9]/.test(mg)) genCfg.thinkingConfig = { thinkingLevel: 'low' };
+                let r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(mg)}:generateContent`, {
+                    method: 'POST', signal,
+                    headers: { 'content-type': 'application/json', 'x-goog-api-key': cfg.key },
+                    body: JSON.stringify({
+                        contents: [{ parts: anh.map(d => ({ inline_data: { mime_type: 'image/jpeg', data: d } })).concat([{ text: cauHoi }]) }],
+                        generationConfig: genCfg
+                    })
+                });
+                let j = await r.json().catch(() => ({}));
+                if (r.ok) {
+                    text = (((j.candidates || [])[0] || {}).content || { parts: [] }).parts.map(p => p.text || '').join('');
+                    if (!text) loiCuoi = new Error('Gemini (' + mg + ') không trả về nội dung');
+                    break;
+                }
+                loiCuoi = new Error((j.error && j.error.message) || ('Gemini API lỗi ' + r.status));
+                console.warn('Gemini', mg, r.status, loiCuoi.message);
+                if (r.status === 404 || r.status === 400 && /model/i.test(loiCuoi.message)) break;   // model không tồn tại -> sang model khác
+                if (![429, 500, 503].includes(r.status)) throw loiCuoi;                             // lỗi khóa/quyền -> báo ngay
+            }
+        }
+        if (!text) throw new Error((loiCuoi ? loiCuoi.message : 'Gemini không phản hồi') + ' (đã thử: ' + dsModel.join(', ') + ')');
     }
     let m = text.match(/\{[\s\S]*\}/);
     if (!m) throw new Error('AI không trả về dữ liệu đọc được.');
@@ -213,7 +234,9 @@ async function dkAiChonAnh(input, cheDo) {
     let t0 = Date.now(), dem = null;
     try {
         bao(`⏳ Đang chuẩn bị ${files.length} ảnh...`);
-        dem = setInterval(() => bao(`⏳ AI (${dkAiCfg.loai} · ${dkAiCfg.model || ''}) đang đọc ${files.length} ảnh... ${Math.round((Date.now() - t0) / 1000)} giây`), 1000);
+        let tinPhu = '';
+        dkAiBaoTien = t => { tinPhu = t; };
+        dem = setInterval(() => bao(`⏳ AI (${dkAiCfg.loai} · ${dkAiCfg.model || ''}) đang đọc ${files.length} ảnh... ${Math.round((Date.now() - t0) / 1000)} giây` + (tinPhu ? ' · ' + tinPhu : '')), 1000);
         let anh = await Promise.all(files.map(dkAnhNen));
         let kq = await dkAiGoi(anh, dkAiPrompt(cheDo, pids));
         clearInterval(dem);
