@@ -145,7 +145,7 @@ function dkChuanCuaTS(std, p) {
     let c = dkSo(t.c);
     if (isNaN(c)) return null;
     let d = dkSo(t.d);
-    return { c, d: isNaN(d) ? 0 : Math.abs(d), kt: t.kt !== undefined ? !!t.kt : p.kt };
+    return { c, d: isNaN(d) ? 0 : Math.abs(d), kt: t.kt !== undefined ? !!t.kt : p.kt, xem: !!t.xem };
 }
 function dkChuText(p, s) {
     if (!s) return '—';
@@ -153,7 +153,62 @@ function dkChuText(p, s) {
     if (p.kieu === 'max') return `≤ ${s.c}`;
     return s.d > 0 ? `${s.c} ± ${s.d}` : `${s.c}`;
 }
+// ----- BẢN GỐC CỦA KHUÔN (dùng khi khuôn chạy trên máy chưa có bản chuẩn riêng) -----
+// Thông số thuộc khuôn + nhựa: máy nào cũng phải giống -> so như bình thường
+const DK_TS_KHUON = new Set(['nh_voi', 'nh_v1', 'nh_v2', 'nh_v3', 'nh_v4', 'nh_cophieu', 'kh_codinh', 'kh_didong',
+    'say_nhiet', 'say_tg', 'pha_xay', 'ba_tg1', 'ba_tg2', 'vp_tgban', 'ck_lammat', 'ck_chuky', 'tl_sp']);
+// Thông số vị trí (mm): quy đổi theo thể tích bắn khi biết đường kính vít 2 máy
+const DK_TS_VITRI = new Set(['bk_vt1', 'bk_vt2', 'bk_vt3', 'bk_vt4', 'ln_vt1', 'ln_vt2', 'hl_vt', 'vp_vt', 'vp_dem']);
+function dkLoaiTS(pid) { return DK_TS_KHUON.has(pid) ? 'khuon' : DK_TS_VITRI.has(pid) ? 'vitri' : 'may'; }
+
+// Bản gốc của khuôn: bản được đánh dấu ⭐ gốc; chưa đánh dấu thì lấy bản cập nhật gần nhất. Bỏ qua máy boQuaM.
+function dkLayChuanGoc(moldId, boQuaM) {
+    let k = getSafeFirebaseKey(moldId), o = (k && dkChuan[k]) || {}, ds = [];
+    Object.keys(o).forEach(mk => {
+        let s = o[mk], m = parseInt(String(mk).replace('M', '')) || 0;
+        if (s && typeof s === 'object' && s.ts && m && m !== parseInt(boQuaM)) ds.push({ m, std: s });
+    });
+    if (!ds.length) return null;
+    ds.sort((a, b) => (b.std.goc ? 1 : 0) - (a.std.goc ? 1 : 0) || String(b.std.updatedAt || '').localeCompare(String(a.std.updatedAt || '')));
+    return ds[0];
+}
+// Đường kính vít của 1 máy: QC đã nhập trên thiết bị này, không thì lấy từ bản chuẩn bất kỳ của máy đó
+function dkVitCuaMay(m) {
+    try { let v = dkSo(localStorage.getItem('qc_dk_vit_M' + parseInt(m))); if (v > 0) return v; } catch (e) {}
+    for (let k of Object.keys(dkChuan || {})) {
+        let s = dkChuan[k] && dkChuan[k][`M${parseInt(m)}`], v = s && s.info ? dkSo(s.info.dkVit) : NaN;
+        if (v > 0) return v;
+    }
+    return NaN;
+}
+function dkLam1(x) { return Math.round(x * 10) / 10; }
+
+// Chuẩn dùng để kiểm khuôn moldId trên máy m:
+//  - có bản riêng của máy -> { std, goc: false }
+//  - chưa có, nhưng khuôn có bản ở máy khác -> bản "hiệu lực" dựng từ bản gốc { std, goc: true, mGoc, stdGoc, heSo, vitGoc, vitMay }
+//    thông số thuộc khuôn: giữ nguyên; vị trí: quy đổi nếu biết ĐK vít 2 máy, không thì chỉ tham khảo; còn lại: chỉ tham khảo
+function dkChuanKiem(moldId, m) {
+    let std = dkLayChuan(moldId, m);
+    if (std) return { std, goc: false };
+    let g = dkLayChuanGoc(moldId, m);
+    if (!g) return null;
+    let vitGoc = dkSo(g.std.info && g.std.info.dkVit), vitMay = dkVitCuaMay(m);
+    let heSo = (vitGoc > 0 && vitMay > 0) ? Math.pow(vitGoc / vitMay, 2) : NaN;
+    let ts = {};
+    Object.keys(g.std.ts || {}).forEach(pid => {
+        let t = Object.assign({}, g.std.ts[pid]), loai = dkLoaiTS(pid);
+        if (loai === 'vitri' && !isNaN(heSo)) {
+            let c = dkSo(t.c), d = dkSo(t.d);
+            if (!isNaN(c)) t.c = dkLam1(c * heSo);
+            if (!isNaN(d)) t.d = dkLam1(d * heSo);
+        } else if (loai !== 'khuon') t.xem = true;
+        ts[pid] = t;
+    });
+    return { std: Object.assign({}, g.std, { ts }), goc: true, mGoc: g.m, stdGoc: g.std, heSo, vitGoc, vitMay };
+}
+
 function dkDat(p, s, v) {
+    if (s && s.xem) return true;          // thông số chỉ tham khảo (kiểm theo bản gốc ở máy khác) -> không tính NG
     if (isNaN(v)) return false;
     if (p.kieu === 'min') return v >= s.c - 1e-9;
     if (p.kieu === 'max') return v <= s.c + 1e-9;
@@ -280,6 +335,7 @@ function dkRender() {
             continue;
         }
         let std = dkLayChuan(mold, m), chk = dkLayCheck(date, m, ca, mold);
+        let goc = std ? null : dkLayChuanGoc(mold, m);
         let cur = laCaHienTai && dkNhacNgay.cur ? dkNhacNgay.cur[`M${m}_${ca}`] : null;
         let doiKhuon = cur && cur.mold === mold && cur.prev;
         let tt, nguoi = '—';
@@ -288,7 +344,8 @@ function dkRender() {
             tt = chk.kq === 'NG'
                 ? `<span class="badge bg-danger px-2 py-2">❌ NG (${soNG} thông số)</span>`
                 : `<span class="badge bg-success px-2 py-2">✅ ĐẠT</span>`;
-            nguoi = `${escapeHtml(chk.by || '')}<br><small class="opacity-75">${chk.at ? dkGio(new Date(chk.at).getTime()) : ''} · ${chk.loai === 'doi_khuon' ? 'Đổi khuôn' : 'Đầu ca'}</small>`;
+            nguoi = `${escapeHtml(chk.by || '')}<br><small class="opacity-75">${chk.at ? dkGio(new Date(chk.at).getTime()) : ''} · ${chk.loai === 'doi_khuon' ? 'Đổi khuôn' : 'Đầu ca'}</small>`
+                + (chk.theoGoc ? `<br><small class="text-info">📋 theo bản gốc ${escapeHtml(chk.theoGoc)}</small>` : '');
         } else if (laCaHienTai) {
             let han = ((cur && cur.mold === mold && cur.since) || ht.batDau) + DK_HAN_PHUT * 60000;
             tt = now > han
@@ -299,8 +356,11 @@ function dkRender() {
         }
         let chuanHtml = std
             ? `<button type="button" class="btn btn-sm btn-outline-info py-0 px-2 rounded-pill" data-act="chuan" data-m="${m}" data-mold="${escapeHtml(mold)}" style="font-size:11px;" title="Cập nhật ${escapeHtml(std.updatedAt || '')} – ${escapeHtml(std.updatedBy || '')}">📄 Đã có · sửa</button>`
+            : goc
+            ? `<div class="small fw-bold text-info">📋 Theo bản gốc M${goc.m}</div>
+               <button type="button" class="btn btn-sm btn-3d-amber py-0 px-2 mt-1" data-act="chepgoc" data-m="${m}" data-mold="${escapeHtml(mold)}" style="font-size:11px;" title="Mở bản chuẩn mới cho M${m}, điền sẵn dữ liệu bản gốc M${goc.m} để kỹ thuật soát lại">📋 Lập bản riêng (chép M${goc.m})</button>`
             : `<button type="button" class="btn btn-sm btn-3d-amber py-0 px-2" data-act="chuan" data-m="${m}" data-mold="${escapeHtml(mold)}" style="font-size:11px;">➕ Lập bản chuẩn</button>`;
-        let thaoTac = std
+        let thaoTac = (std || goc)
             ? `<button type="button" class="btn btn-sm ${chk ? 'btn-outline-info' : 'btn-3d-emerald'} py-1 px-3 fw-bold" data-act="kiem" data-m="${m}" style="font-size:12px;">${chk ? '👁️ Xem / kiểm lại' : '📝 Kiểm tra'}</button>`
             : `<small class="text-warning fw-bold">Chưa có bản chuẩn</small>`;
         html += `<tr>
@@ -317,6 +377,7 @@ function dkClick(e) {
     let m = parseInt(b.dataset.m);
     if (b.dataset.act === 'chuan') dkMoChuan(b.dataset.mold, m);
     else if (b.dataset.act === 'kiem') dkMoKiemTra(dkXem.date, dkXem.ca, m);
+    else if (b.dataset.act === 'chepgoc') dkMoChuanTuGoc(b.dataset.mold, m);
 }
 
 // ===================== 5. LẬP / SỬA BẢN ĐIỀU KIỆN CHUẨN =====================
@@ -359,18 +420,33 @@ function dkMoThuVien() {
     document.getElementById('dkThuVienModalBody').innerHTML = `
         <input type="text" class="form-control form-control-sm mb-2" placeholder="🔎 Tìm mã khuôn / sản phẩm..." oninput="dkLocThuVien(this.value)">
         <div class="table-responsive"><table class="table table-bordered table-sm align-middle text-center mb-0">
-            <thead><tr><th>Mã khuôn</th><th>Máy</th><th>Sản phẩm</th><th>Nhựa</th><th>Cập nhật</th><th></th></tr></thead>
+            <thead><tr><th>Mã khuôn</th><th>Máy</th><th title="Bản gốc của khuôn: dùng để kiểm khi khuôn chạy trên máy chưa có bản riêng">Gốc</th><th>Sản phẩm</th><th>Nhựa</th><th>Cập nhật</th><th></th></tr></thead>
             <tbody id="dkThuVienTbody">${ds.map((x, i) => `
                 <tr data-tim="${escapeHtml((x.moldId + ' ' + ((x.s.info || {}).tenSP || '') + ' ' + ((x.s.info || {}).maSP || '')).toLowerCase())}">
-                    <td class="fw-bold text-warning">${escapeHtml(x.moldId)}</td><td class="fw-bold">M${x.m}</td>
+                    <td class="fw-bold text-warning">${escapeHtml(x.moldId)}</td><td class="fw-bold">M${x.m}${x.s.tuGoc ? `<br><small class="fw-normal opacity-75">từ ${escapeHtml(x.s.tuGoc)}</small>` : ''}</td>
+                    <td><button type="button" class="btn btn-sm py-0 px-1 ${x.s.goc ? 'btn-warning' : 'btn-outline-secondary'}" style="font-size:13px;" onclick="dkDatGoc(${i})"
+                        title="${x.s.goc ? 'Đang là bản gốc của khuôn' : 'Đặt làm bản gốc của khuôn (bản đã duyệt chạy hàng OK)'}">${x.s.goc ? '⭐' : '☆'}</button></td>
                     <td class="small">${escapeHtml((x.s.info || {}).tenSP || (x.s.info || {}).maSP || '')}</td>
                     <td class="small">${escapeHtml((x.s.info || {}).nhua || '')}</td>
                     <td class="small">${escapeHtml(String(x.s.updatedAt || '').substring(0, 10))}<br>${escapeHtml(x.s.updatedBy || '')}</td>
                     <td><button type="button" class="btn btn-sm btn-outline-info py-0 px-2" onclick="dkMoTuThuVien(${i})">✏️ Sửa</button></td>
-                </tr>`).join('') || '<tr><td colspan="6" class="fst-italic small">Chưa có bản chuẩn nào. Bấm "Lập bản chuẩn mới".</td></tr>'}
+                </tr>`).join('') || '<tr><td colspan="7" class="fst-italic small">Chưa có bản chuẩn nào. Bấm "Lập bản chuẩn mới".</td></tr>'}
             </tbody></table></div>`;
     dkModalThuVien = bootstrap.Modal.getOrCreateInstance(el);
     dkModalThuVien.show();
+}
+// Đặt 1 bản làm ⭐ bản gốc của khuôn (bỏ dấu ở các máy khác của cùng khuôn)
+function dkDatGoc(i) {
+    let x = dkDanhSachChuan()[i];
+    if (!x || !db || !checkAuthOrAlert()) return;
+    if (x.s.goc) { if (!confirm(`Bỏ dấu bản gốc của khuôn ${x.moldId} (M${x.m})?`)) return; }
+    else if (!confirm(`Đặt bản M${x.m} làm BẢN GỐC của khuôn ${x.moldId}?\nKhi khuôn chạy trên máy chưa có bản riêng, QC sẽ kiểm theo bản này.`)) return;
+    let up = {};
+    Object.keys(dkChuan[x.k] || {}).forEach(mk => { if (dkChuan[x.k][mk] && typeof dkChuan[x.k][mk] === 'object') up[`${mk}/goc`] = null; });
+    if (!x.s.goc) up[`${x.mk}/goc`] = true;
+    db.ref(`${DK_PATH_CHUAN}/${x.k}`).update(up)
+        .then(() => dkMoThuVien())
+        .catch(err => alert('❌ Không lưu được: ' + err.message));
 }
 function dkLocThuVien(q) {
     q = String(q || '').trim().toLowerCase();
@@ -445,6 +521,22 @@ function dkDienFormChuan(std) {
     body.querySelectorAll('.dk-kt').forEach(i => { let t = ts[i.dataset.pid], p = dkThongSo(i.dataset.pid); i.checked = (t && t.kt !== undefined) ? !!t.kt : !!(p && p.kt); });
     if (typeof dkDongBoMes === 'function') dkDongBoMes();
 }
+function dkMoChuanTuGoc(moldId, m) {
+    let g = dkLayChuanGoc(moldId, m);
+    dkMoChuan(moldId, m);
+    if (!g) return;
+    let ck = dkChuanKiem(moldId, m) || {};
+    // Thông số thuộc khuôn + vị trí đã quy đổi (nếu biết ĐK vít) -> điền sẵn; áp suất/tốc độ lấy theo bản gốc để kỹ thuật chỉnh
+    let ts = {};
+    Object.keys(g.std.ts || {}).forEach(pid => { ts[pid] = Object.assign({}, g.std.ts[pid], (ck.std && ck.std.ts[pid]) || {}); delete ts[pid].xem; });
+    dkDienFormChuan(Object.assign({}, g.std, { ts, info: Object.assign({}, g.std.info, { model: '', dkVit: ck.vitMay > 0 ? String(ck.vitMay) : '' }) }));
+    let tb = document.createElement('div');
+    tb.className = 'alert alert-info py-1 px-2 small fw-bold mb-2';
+    tb.textContent = `📋 Đã điền sẵn từ bản gốc M${g.m}` + (!isNaN(ck.heSo) ? ` (vị trí đã quy đổi theo ĐK vít ${ck.vitGoc} → ${ck.vitMay} mm)` : '')
+        + '. Kỹ thuật soát lại áp suất, tốc độ, vị trí cho đúng máy này rồi bấm Lưu.';
+    let body = document.getElementById('dkChuanModalBody');
+    if (body) body.prepend(tb);
+}
 function dkSaoChepChuan(i) {
     let x = dkDanhSachChuan()[parseInt(i)];
     if (x) dkDienFormChuan(x.s);
@@ -472,6 +564,8 @@ function dkLuuChuan() {
     let info = {};
     body.querySelectorAll('.dk-info').forEach(i => { if (i.value.trim()) info[i.dataset.info] = i.value.trim(); });
     let rec = { moldId, may: m, info, ts, updatedAt: new Date().toISOString(), updatedBy: (currentUser && currentUser.email) || '' };
+    let cu = dkLayChuan(moldId, m);
+    if (cu && cu.goc) rec.goc = true;
     let path = `${DK_PATH_CHUAN}/${getSafeFirebaseKey(moldId)}/M${m}`;
     // Sửa mã khuôn / số máy của bản cũ -> lưu sang vị trí mới, hỏi trước khi ghi đè bản đã có ở đó
     let khacViTri = dkDangSua && (dkDangSua.moldId !== moldId || dkDangSua.m !== m);
@@ -494,12 +588,13 @@ function dkXoaChuan() {
 function dkMoKiemTra(date, ca, m) {
     if (!checkAuthOrAlert()) return;
     let mold = dkKhuonDangChay(date, m, ca);
-    let std = mold ? dkLayChuan(mold, m) : null;
-    if (!std) { alert('⚠️ Khuôn này chưa có bản điều kiện chuẩn trên máy này.'); return; }
+    let ck = mold ? dkChuanKiem(mold, m) : null;
+    if (!ck) { alert('⚠️ Khuôn này chưa có bản điều kiện chuẩn trên máy nào.'); return; }
+    let std = ck.std;
     let chk = dkLayCheck(date, m, ca, mold);
     let cur = dkNhacNgay.cur ? dkNhacNgay.cur[`M${m}_${ca}`] : null;
     let loai = chk ? chk.loai : ((cur && cur.mold === mold && cur.prev) ? 'doi_khuon' : 'dau_ca');
-    dkDangKiem = { date, ca, m, mold };
+    dkDangKiem = { date, ca, m, mold, ck };
     let qcTen = (chk && chk.by) || (tab1Store[date] ? getShiftInspector(tab1Store[date], ca, m) : '') || '';
     if (!qcTen) { try { qcTen = localStorage.getItem('qc_dk_ten_qc') || ''; } catch (e) {} }
     let info = std.info || {};
@@ -512,7 +607,7 @@ function dkMoKiemTra(date, ca, m) {
     let hangTS = (p, s) => `
         <tr data-pid="${p.id}">
             <td class="text-start small ${p.tam ? 'fw-bold' : ''}">${p.tam ? '△ ' : ''}${p.ten} <span class="opacity-75">(${p.dv})</span></td>
-            <td class="fw-bold text-info">${dkChuText(p, s)}</td>
+            <td class="fw-bold ${s.xem ? 'opacity-75' : 'text-info'}">${dkChuText(p, s)}${s.xem ? '<br><small class="fw-normal">tham khảo</small>' : ''}</td>
             <td><input type="text" inputmode="decimal" class="form-control form-control-sm text-center fw-bold dk-v" data-pid="${p.id}"
                 value="${vals[p.id] !== undefined ? vals[p.id] : ''}" oninput="dkCapNhatDong(this)"></td>
             <td class="dk-kq" style="width:44px;"></td></tr>`;
@@ -526,6 +621,20 @@ function dkMoKiemTra(date, ca, m) {
                     <option value="doi_khuon" ${loai === 'doi_khuon' ? 'selected' : ''}>Đổi khuôn / đổi mã hàng</option>
                 </select></div>
         </div>
+        ${ck.goc ? `
+        <div class="alert alert-info py-2 px-2 small mb-2">
+            <b>📋 M${m} chưa có bản chuẩn riêng – đang kiểm theo BẢN GỐC M${ck.mGoc}</b>${ck.stdGoc.goc ? ' ⭐' : ''}
+            (cập nhật ${escapeHtml(String(ck.stdGoc.updatedAt || '').substring(0, 10))}).<br>
+            • Nhiệt độ, nhiệt khuôn, sấy, thời gian bảo áp / bắn keo / làm mát, chu kỳ, trọng lượng SP: so như bình thường.<br>
+            • Vị trí: ${!isNaN(ck.heSo) ? `đã quy đổi theo ĐK vít ${ck.vitGoc} mm (M${ck.mGoc}) → ${ck.vitMay} mm (M${m}).` : 'chỉ tham khảo – nhập ĐK vít 2 máy để quy đổi và so sánh.'}<br>
+            • Áp suất, tốc độ, lực kẹp…: chỉ tham khảo, vẫn nhập số thực tế để lập bản riêng cho M${m}.
+            <div class="d-flex align-items-center gap-2 mt-2 flex-wrap">
+                <span>ĐK vít M${ck.mGoc}: <b>${ck.vitGoc > 0 ? ck.vitGoc + ' mm' : 'chưa có'}</b></span>
+                <span>· ĐK vít M${m}:</span>
+                <input type="text" inputmode="decimal" id="dkKVit" class="form-control form-control-sm text-center" style="width:80px;" value="${ck.vitMay > 0 ? ck.vitMay : ''}" placeholder="mm">
+                <button type="button" class="btn btn-sm btn-outline-info py-0 px-2" onclick="dkApDungVit()">Áp dụng</button>
+            </div>
+        </div>` : ''}
         <div class="small mb-2 opacity-75">${[info.tenSP || info.maSP, info.nhua && ('Nhựa: ' + info.nhua), info.mau && ('Màu: ' + info.mau), info.cavity && ('Cavity: ' + info.cavity)].filter(Boolean).map(escapeHtml).join(' · ')}</div>`;
     let thamKhao = '';
     DK_NHOM.forEach(g => {
@@ -551,6 +660,11 @@ function dkMoKiemTra(date, ca, m) {
         }
     });
     if (thamKhao) html += `<details class="mb-2"><summary class="fw-bold small text-info">Thông số tham khảo (không bắt buộc nhập)</summary>${thamKhao}</details>`;
+    if (ck.goc) html += `
+        <div class="form-check mb-2 p-2 border border-warning rounded-3">
+            <input type="checkbox" class="form-check-input ms-0 me-2" id="dkKSpDau" ${chk && chk.spDauOK ? 'checked' : ''}>
+            <label class="form-check-label small fw-bold" for="dkKSpDau">✅ Sản phẩm đầu tiên trên M${m} đã kiểm OK (trọng lượng trong dung sai, ngoại quan đạt) – bắt buộc khi kiểm theo bản gốc</label>
+        </div>`;
     html += `<label class="small fw-bold">Ghi chú / xử lý khi NG</label>
         <textarea class="form-control form-control-sm" id="dkKGhiChu" rows="2" placeholder="Bắt buộc khi có thông số NG: đã báo ai, xử lý thế nào...">${escapeHtml((chk && chk.note) || '')}</textarea>`;
     document.getElementById('dkKiemModalBody').innerHTML = html;
@@ -561,11 +675,12 @@ function dkMoKiemTra(date, ca, m) {
 
 function dkCapNhatDong(inp) {
     if (!dkDangKiem) return;
-    let std = dkLayChuan(dkDangKiem.mold, dkDangKiem.m), p = dkThongSo(inp.dataset.pid), s = dkChuanCuaTS(std, p);
+    let std = dkDangKiem.ck.std, p = dkThongSo(inp.dataset.pid), s = dkChuanCuaTS(std, p);
     let o = inp.closest('tr').querySelector('.dk-kq');
     let v = dkSo(inp.value);
     inp.classList.remove('is-valid', 'is-invalid');
     if (inp.value.trim() === '' || !s) o.innerHTML = '';
+    else if (s.xem) o.innerHTML = '<span class="badge bg-secondary">TK</span>';
     else if (dkDat(p, s, v)) { o.innerHTML = '<span class="badge bg-success">OK</span>'; inp.classList.add('is-valid'); }
     else { o.innerHTML = '<span class="badge bg-danger">NG</span>'; inp.classList.add('is-invalid'); }
     let tat = [...document.querySelectorAll('#dkKiemModalBody .dk-v')];
@@ -576,10 +691,10 @@ function dkCapNhatDong(inp) {
 
 function dkNhomDungChuan(maNhom) {
     if (!dkDangKiem) return;
-    let std = dkLayChuan(dkDangKiem.mold, dkDangKiem.m);
+    let std = dkDangKiem.ck.std;
     document.querySelectorAll(`#dkKiemModalBody .dk-nhom-kiem[data-nhom="${maNhom}"] .dk-v`).forEach(inp => {
         let p = dkThongSo(inp.dataset.pid), s = dkChuanCuaTS(std, p);
-        if (!p || p.tam || !s || inp.value.trim() !== '') return;
+        if (!p || p.tam || !s || s.xem || inp.value.trim() !== '') return;
         inp.value = s.c;
         dkCapNhatDong(inp);
     });
@@ -587,8 +702,8 @@ function dkNhomDungChuan(maNhom) {
 
 async function dkLuuKiemTra() {
     if (!checkAuthOrAlert() || !db || !dkDangKiem) return;
-    let { date, ca, m, mold } = dkDangKiem;
-    let std = dkLayChuan(mold, m);
+    let { date, ca, m, mold, ck } = dkDangKiem;
+    let std = ck.std;
     let ten = document.getElementById('dkKTen').value.trim();
     if (!ten) { alert('⚠️ Vui lòng nhập tên QC kiểm.'); return; }
     let vals = {}, ng = [], thieu = 0;
@@ -601,10 +716,16 @@ async function dkLuuKiemTra() {
     if (thieu) { alert(`⚠️ Còn ${thieu} thông số chưa nhập giá trị thực tế (hoặc không phải là số).`); return; }
     let note = document.getElementById('dkKGhiChu').value.trim();
     if (ng.length && !note) { alert('⚠️ Có thông số NG – vui lòng ghi chú cách xử lý / đã báo kỹ thuật.'); return; }
+    let spDau = document.getElementById('dkKSpDau');
+    if (ck.goc && !(spDau && spDau.checked)) { alert(`⚠️ Đang kiểm theo bản gốc M${ck.mGoc}: phải kiểm sản phẩm đầu tiên trên M${m} OK rồi tích xác nhận.`); return; }
     let rec = {
         moldId: mold, may: m, ca, loai: document.getElementById('dkKLoai').value, vals, ng,
         kq: ng.length ? 'NG' : 'OK', note, by: ten, email: (currentUser && currentUser.email) || '', at: new Date().toISOString()
     };
+    if (ck.goc) {
+        rec.theoGoc = `M${ck.mGoc}`; rec.spDauOK = true;
+        if (!isNaN(ck.heSo)) { rec.heSo = Math.round(ck.heSo * 10000) / 10000; rec.vitGoc = ck.vitGoc; rec.vitMay = ck.vitMay; }
+    }
     try {
         await db.ref(`${DK_PATH_CHECK}/${date}/M${m}_${ca}/${getSafeFirebaseKey(mold)}`).set(rec);
     } catch (err) {
@@ -620,9 +741,58 @@ async function dkLuuKiemTra() {
     if (ng.length) {
         let nhom = dkNhomTheoMay(m);
         let dong = ng.map(pid => { let p = dkThongSo(pid), s = dkChuanCuaTS(std, p); return `  • ${p.ten}: thực tế ${vals[pid]} ${p.dv} (chuẩn ${dkChuText(p, s)})`; });
-        dkXepTinZalo(nhom.ma, `🚨 [ĐIỀU KIỆN ÉP NG – ${nhom.xuong}]\n📅 ${dkNgayNgan(date)} · ${ca} · M${m} · Khuôn ${mold}\n👤 QC: ${ten}\n${dong.join('\n')}\n📝 ${note}`)
+        dkXepTinZalo(nhom.ma, `🚨 [ĐIỀU KIỆN ÉP NG – ${nhom.xuong}]\n📅 ${dkNgayNgan(date)} · ${ca} · M${m} · Khuôn ${mold}`
+            + (ck.goc ? ` (theo bản gốc M${ck.mGoc})` : '') + `\n👤 QC: ${ten}\n${dong.join('\n')}\n📝 ${note}`)
             .catch(e => console.warn('Không xếp được tin Zalo:', e));
     }
+    // Kiểm theo bản gốc đạt + SP đầu OK -> đề nghị lưu số thực tế thành bản chuẩn riêng cho máy này
+    if (ck.goc && !ng.length && confirm(`✅ Đã lưu xác nhận M${m} (theo bản gốc M${ck.mGoc}).\n\nLưu luôn các số thực tế vừa kiểm thành BẢN CHUẨN RIÊNG cho khuôn ${mold} trên M${m}?\n(Lần sau khuôn chạy ở M${m} sẽ so với bản này.)`))
+        dkLuuThanhChuan(mold, m, ck, vals);
+}
+
+// Dựng bản chuẩn riêng cho máy m từ bản gốc + số thực tế QC vừa kiểm (đã xác nhận SP đầu OK)
+function dkTaoChuanTuKiem(mold, m, ck, vals, nguoi) {
+    let ts = {};
+    Object.keys(ck.stdGoc.ts || {}).forEach(pid => {
+        let g = ck.stdGoc.ts[pid], loai = dkLoaiTS(pid), cGoc = dkSo(g.c), dGoc = dkSo(g.d);
+        if (isNaN(cGoc)) return;
+        let quyDoi = loai === 'vitri' && !isNaN(ck.heSo);
+        let d = isNaN(dGoc) ? 0 : (quyDoi ? dkLam1(dGoc * ck.heSo) : dGoc);
+        let c;
+        if (vals[pid] !== undefined) c = vals[pid];                       // số thực tế đang chạy OK
+        else if (loai === 'khuon') c = cGoc;                              // thuộc khuôn: giống bản gốc
+        else if (quyDoi) c = dkLam1(cGoc * ck.heSo);                     // vị trí quy đổi theo ĐK vít
+        else return;                                                      // thuộc máy, không đo -> kỹ thuật bổ sung sau
+        ts[pid] = { c, d, kt: g.kt !== undefined ? !!g.kt : !!(dkThongSo(pid) || {}).kt };
+    });
+    let info = Object.assign({}, ck.stdGoc.info || {});
+    delete info.model;
+    if (ck.vitMay > 0) info.dkVit = String(ck.vitMay); else delete info.dkVit;
+    info.ghiChu = `Lập từ bản gốc M${ck.mGoc} + số thực tế QC kiểm (SP đầu OK)` + (info.ghiChu ? ' · ' + info.ghiChu : '');
+    return { moldId: mold, may: m, info, ts, tuGoc: `M${ck.mGoc}`, updatedAt: new Date().toISOString(), updatedBy: nguoi || '' };
+}
+function dkLuuThanhChuan(mold, m, ck, vals) {
+    if (!db) return;
+    if (dkLayChuan(mold, m) && !confirm(`Khuôn ${mold} trên M${m} đã có bản chuẩn. Ghi đè?`)) return;
+    let rec = dkTaoChuanTuKiem(mold, m, ck, vals, (currentUser && currentUser.email) || '');
+    db.ref(`${DK_PATH_CHUAN}/${getSafeFirebaseKey(mold)}/M${m}`).set(rec)
+        .then(() => { alert(`✅ Đã lưu bản chuẩn riêng cho ${mold} trên M${m} (${Object.keys(rec.ts).length} thông số).\nKỹ thuật vào "📄 Đã có · sửa" để soát lại và bổ sung thông số đóng/mở/đẩy nếu cần.`); dkRender(); })
+        .catch(err => alert('❌ Không lưu được bản chuẩn: ' + err.message));
+}
+function dkApDungVit() {
+    if (!dkDangKiem) return;
+    let v = dkSo((document.getElementById('dkKVit') || {}).value);
+    if (!(v > 0)) { alert('⚠️ Nhập đường kính vít (mm) của máy này.'); return; }
+    try { localStorage.setItem('qc_dk_vit_M' + dkDangKiem.m, String(v)); } catch (e) {}
+    // giữ các số đã nhập, mở lại bảng kiểm với chuẩn vị trí đã quy đổi
+    let daNhap = {};
+    document.querySelectorAll('#dkKiemModalBody .dk-v').forEach(i => { if (i.value.trim() !== '') daNhap[i.dataset.pid] = i.value; });
+    let ten = (document.getElementById('dkKTen') || {}).value, note = (document.getElementById('dkKGhiChu') || {}).value;
+    let { date, ca, m } = dkDangKiem;
+    dkMoKiemTra(date, ca, m);
+    document.querySelectorAll('#dkKiemModalBody .dk-v').forEach(i => { if (daNhap[i.dataset.pid] !== undefined) { i.value = daNhap[i.dataset.pid]; dkCapNhatDong(i); } });
+    if (ten) document.getElementById('dkKTen').value = ten;
+    if (note) document.getElementById('dkKGhiChu').value = note;
 }
 
 // ===================== 7. BỘ NHẮC VIỆC ZALO =====================
@@ -687,7 +857,7 @@ async function dkNhacTick() {
                 if (!daKiem && now > cur.since + DK_HAN_PHUT * 60000) {
                     let id = `DK_${key}_${moldKey}`;
                     if (!daNhac(id)) ungVien.push({ id, nhom, loai: 'dk',
-                        dong: `  • M${m} – khuôn ${mold}` + (cur.prev ? ` (đổi khuôn lúc ${dkGio(cur.since)})` : '') + (dkLayChuan(mold, m) ? '' : ' – ⚠️ chưa có bản điều kiện chuẩn') });
+                        dong: `  • M${m} – khuôn ${mold}` + (cur.prev ? ` (đổi khuôn lúc ${dkGio(cur.since)})` : '') + (dkLayChuan(mold, m) ? '' : (dkLayChuanGoc(mold, m) ? ` – 📋 chưa có bản riêng, kiểm theo bản gốc M${dkLayChuanGoc(mold, m).m} (kỹ thuật cần lập bản cho M${m})` : ' – ⚠️ chưa có bản điều kiện chuẩn')) });
                 }
                 // (b) Kiểm SP định kỳ 2 giờ/lần
                 let rec2 = t2[`${key}_${slot}`];
