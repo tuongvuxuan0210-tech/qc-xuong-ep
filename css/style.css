@@ -658,3 +658,45 @@
 .qc-mold-auto[readonly] { background-color: rgba(56,189,248,.08) !important; cursor: default; }
 .qc-mold-auto[readonly]::placeholder { color: #f59e0b; opacity: .85; font-weight: 600; font-size: 11px; }
 .qc-mold-auto.qc-mold-inherited { font-style: italic; opacity: .85; }
+
+/* MENU TAB DỌC BÊN TRÁI (màn hình rộng). Điện thoại (≤768px) vẫn giữ thanh tab ngang để không chiếm chỗ bảng. */
+@media (min-width: 769px) {
+    body:not(.not-logged-in) #mainAppContent {
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+    }
+
+    #mainAppContent > #qcTabs {
+        flex: 0 0 220px;
+        width: 220px;
+        flex-direction: column;
+        flex-wrap: nowrap;
+        overflow-x: visible;
+        overflow-y: auto;
+        gap: 8px;
+        padding-bottom: 0;
+        margin-bottom: 0 !important;
+        position: sticky;
+        top: 8px;
+        max-height: calc(100vh - 16px);
+    }
+
+    #qcTabs .nav-item,
+    #qcTabs .nav-link {
+        width: 100%;
+    }
+
+    #qcTabs .nav-link {
+        white-space: normal;
+        text-align: left;
+        padding: 10px 12px;
+        font-size: 12.5px;
+        line-height: 1.3;
+    }
+
+    #mainAppContent > .tab-content {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+}
