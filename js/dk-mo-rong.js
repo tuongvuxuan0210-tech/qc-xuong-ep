@@ -126,10 +126,26 @@ Quy tắc:
 - ${cachLay}
 - Vùng nhiệt: "Vòi phun" là vùng sát đầu phun (Nozzle); Vùng 1, 2, 3, 4 lần lượt đi từ phía vòi phun về phía phễu.
 - Bắn keo cấp 1 đến 4 theo thứ tự máy thực hiện (cấp 1 là cấp bắn đầu tiên). Bảo áp 1, 2 và Lấy 1, 2 cũng theo thứ tự thực hiện.
-- Giữ đúng đơn vị ghi trong danh sách. Nếu màn hình dùng đơn vị khác thì bỏ qua thông số đó và nêu trong "ghi_chu".
+- Màn hình Haitian thường KHÔNG ghi đơn vị: khi đó coi số đọc được là đúng đơn vị trong danh sách. Chỉ bỏ qua khi màn hình ghi rõ một đơn vị khác (nêu trong "ghi_chu").
+- Cấp/cột có giá trị 0 hoặc 0.0 ở mọi hàng là cấp KHÔNG dùng: bỏ qua, không trả về số 0.
+
+CÁCH ĐỌC TRANG "Cài nhanh" (Quick set) CỦA HAITIAN – mỗi khối nhận diện bằng biểu tượng và tiêu đề cột; tên hàng viết tắt:
+"Vịtrí" = vị trí (mm), "ÁpL." = áp lực (bar), "Tđộ" = tốc độ (%), "Tgian" = thời gian (s), "L.Áp" = lưng áp / áp suất lưng (bar).
+- Khối trên cùng bên trái, cột "#1 #2 #3 ÁpT. ÁpC." = ĐÓNG KHUÔN: #1→dk_*1, #2→dk_*2, #3→dk_*3, ÁpT.(thấp áp)→dk_*t, ÁpC.(cao áp)→dk_*c.
+- Khối trên cùng bên phải, cột "#5 #4 #3 #2 #1" (đánh số TỪ PHẢI SANG TRÁI) = MỞ KHUÔN: #1→mk_*1, #2→mk_*2, #3→mk_*3, #4→mk_*4, #5→mk_*c.
+- Khối hàng 2 bên trái (biểu tượng trục vít tiến), cột "#6 … #1" (từ phải sang trái), hàng Vịtrí/ÁpL./Tđộ = BẮN KEO: #1→bk_*1, #2→bk_*2, #3→bk_*3, #4→bk_*4.
+- Khối hàng 3 bên trái, cột "#6 … #1" (từ phải sang trái), hàng ÁpL./Tđộ/Tgian = BẢO ÁP: #1→ba_*1, #2→ba_*2 (Tgian→ba_tg*).
+- Khối dưới cùng bên trái, cột "#1 … #5" (từ trái sang phải), hàng Vịtrí/ÁpL./Tđộ/L.Áp = LẤY NHỰA: ÁpL.→ln_al*, L.Áp→ln_ap*, Tđộ→ln_td*, Vịtrí→ln_vt*.
+  Cấp lấy nhựa đang dùng đầu tiên (số # nhỏ nhất có giá trị khác 0) → Lấy 1 (hậu tố 1), cấp dùng kế tiếp → Lấy 2 (hậu tố 2).
+- Khối giữa bên phải, cột "T.1 T.2" = ĐẨY TIẾN: T.1→ds_*1, T.2→ds_*2. Khối "Lùi2 Lùi1" = ĐẨY LÙI: Lùi1→ds_*l, Lùi2→ds_*l2.
+- Khối nhỏ dưới bên phải (1 cột, hàng Vịtrí/ÁpL./Tđộ, biểu tượng trục vít lùi) = HÚT LÙI: Vịtrí→hl_vt, ÁpL.→hl_ap, Tđộ→hl_td.
+- "CàiNhiệt" = dãy nhiệt độ nòng cài đặt, đọc từ trái sang phải, từ trên xuống dưới: số thứ 1→nh_voi (vòi phun), thứ 2→nh_v1, thứ 3→nh_v2, thứ 4→nh_v3, thứ 5→nh_v4. Cổ phễu và dầu chỉ lấy khi có nhãn rõ.
+- Dòng "MIN: … MAX: …" ở cuối là giới hạn của ô đang chọn – bỏ qua.
+- Ở trang này "dk_*1" nghĩa là dk_ap1 (ÁpL.), dk_td1 (Tđộ), dk_vt1 (Vịtrí); áp dụng tương tự cho mọi khối.
+- Tên/model máy hiện trên màn hình (ví dụ "MA1200GIII") trả về ở trường "model_may".
 
 Trả về DUY NHẤT một đối tượng JSON, không kèm chữ nào khác:
-{"gia_tri": {"<id>": <số>, ...}, "ghi_chu": "<ghi chú ngắn nếu có, hoặc chuỗi rỗng>"}`;
+{"gia_tri": {"<id>": <số>, ...}, "model_may": "<model máy nếu thấy, hoặc chuỗi rỗng>", "ghi_chu": "<ghi chú ngắn nếu có, hoặc chuỗi rỗng>"}`;
 }
 
 async function dkAiGoi(anh, cauHoi) {
@@ -165,7 +181,7 @@ async function dkAiGoi(anh, cauHoi) {
     let m = text.match(/\{[\s\S]*\}/);
     if (!m) throw new Error('AI không trả về dữ liệu đọc được.');
     let kq = JSON.parse(m[0]);
-    return { giaTri: (kq && kq.gia_tri) || {}, ghiChu: (kq && kq.ghi_chu) || '' };
+    return { giaTri: (kq && kq.gia_tri) || {}, model: String((kq && kq.model_may) || '').trim(), ghiChu: (kq && kq.ghi_chu) || '' };
 }
 
 async function dkAiChonAnh(input, cheDo) {
@@ -191,6 +207,12 @@ async function dkAiChonAnh(input, cheDo) {
             let nhom = i.closest('details'); if (nhom) nhom.open = true;
             if (cheDo === 'kiem') dkCapNhatDong(i);
         });
+        // Model máy (chỉ ở bản chuẩn, ô còn trống và không bị khóa bởi MES)
+        let oModel = cheDo === 'chuan' ? document.querySelector('#dkChuanModalBody .dk-info[data-info="model"]') : null;
+        if (oModel && kq.model && !oModel.readOnly && !oModel.value.trim()) {
+            oModel.value = kq.model; n++;
+            oModel.style.outline = '2px solid #f59e0b'; oModel.title = 'AI đọc từ ảnh – hãy đối chiếu lại';
+        }
         bao(n ? `✅ AI đã điền ${n} thông số (ô viền vàng) – đối chiếu lại với màn hình máy trước khi lưu.` + (kq.ghiChu ? ' Ghi chú: ' + kq.ghiChu : '')
               : '⚠️ AI không đọc được thông số nào từ ảnh. ' + (kq.ghiChu || 'Chụp lại gần và rõ hơn.'), n ? '#10b981' : '#f59e0b');
     } catch (e) {

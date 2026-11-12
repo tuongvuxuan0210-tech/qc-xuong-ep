@@ -61,8 +61,9 @@ const DK_NHOM = [
     { ma: 'BA', ten: 'Bảo áp (Holding pressure)',
         ds: dkLuoi('ba', [['ap', 'Áp suất', 'bar'], ['td', 'Tốc độ', '%'], ['tg', 'Thời gian', 's']], [['1', 'Bảo áp 1'], ['2', 'Bảo áp 2']]) },
     { ma: 'LN', ten: 'Lấy nhựa & hút lùi (Charging / Suck back)',
-        ds: dkLuoi('ln', [['ap', 'Áp suất lưng', 'bar'], ['td', 'Tốc độ', '%'], ['vt', 'Vị trí', 'mm']], [['1', 'Lấy 1'], ['2', 'Lấy 2']])
-            .concat([dkP('hl_vt', 'Hút lùi', 'mm')]) },
+        // Khớp màn hình Haitian: Vị trí / ÁpL. (áp lực lấy nhựa) / Tđộ / L.Áp (lưng áp) – id cũ ln_ap* giữ nghĩa "áp suất lưng"
+        ds: dkLuoi('ln', [['al', 'Áp lực lấy nhựa', 'bar'], ['ap', 'Áp suất lưng (L.Áp)', 'bar'], ['td', 'Tốc độ', '%'], ['vt', 'Vị trí', 'mm']], [['1', 'Lấy 1'], ['2', 'Lấy 2']])
+            .concat([dkP('hl_vt', 'Hút lùi – Vị trí', 'mm'), dkP('hl_ap', 'Hút lùi – Áp suất', 'bar', { kt: false }), dkP('hl_td', 'Hút lùi – Tốc độ', '%', { kt: false })]) },
     { ma: 'VP', ten: 'Chuyển bảo áp & đệm keo (V/P – Cushion)', ds: [
         dkP('vp_vt', 'Vị trí chuyển V/P', 'mm'), dkP('vp_tgban', 'Thời gian bắn keo', 's', { d: 0.1, tam: true }),
         dkP('vp_dem', 'Đệm keo thực tế', 'mm', { d: 2, tam: true }), dkP('vp_tglay', 'Thời gian lấy nhựa', 's', { d: 1 })
@@ -72,11 +73,11 @@ const DK_NHOM = [
         dkP('tl_sp', 'Trọng lượng SP / Run', 'g', { tam: true }), dkP('ck_luckep', 'Lực kẹp', 'Tấn', { kt: false })
     ] },
     { ma: 'DK', ten: '3. Đóng khuôn (Mold close)', thamKhao: true,
-        ds: dkLuoi('dk', DK_HANG_ATV, [['1', 'Cấp 1'], ['2', 'Cấp 2'], ['t', 'Thấp áp'], ['c', 'Cao áp']], { kt: false }) },
+        ds: dkLuoi('dk', DK_HANG_ATV, [['1', 'Cấp 1'], ['2', 'Cấp 2'], ['3', 'Cấp 3'], ['t', 'Thấp áp'], ['c', 'Cao áp']], { kt: false }) },
     { ma: 'MK', ten: 'Mở khuôn (Mold open)', thamKhao: true,
-        ds: dkLuoi('mk', DK_HANG_ATV, [['1', 'Cấp 1'], ['2', 'Cấp 2'], ['3', 'Cấp 3'], ['c', 'Cuối']], { kt: false }) },
+        ds: dkLuoi('mk', DK_HANG_ATV, [['1', 'Cấp 1'], ['2', 'Cấp 2'], ['3', 'Cấp 3'], ['4', 'Cấp 4'], ['c', 'Cấp 5 (cuối)']], { kt: false }) },
     { ma: 'DS', ten: '4. Đẩy sản phẩm (Ejector)', thamKhao: true,
-        ds: dkLuoi('ds', DK_HANG_ATV, [['1', 'Tiến 1'], ['2', 'Tiến 2'], ['l', 'Lùi']], { kt: false })
+        ds: dkLuoi('ds', DK_HANG_ATV, [['1', 'Tiến 1'], ['2', 'Tiến 2'], ['l', 'Lùi 1'], ['l2', 'Lùi 2']], { kt: false })
             .concat([dkP('ds_solan', 'Số lần đẩy', 'lần', { kt: false })]) }
 ];
 const DK_INFO = [
