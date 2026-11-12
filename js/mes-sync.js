@@ -37,6 +37,28 @@ let mesAuthReady = false;
 let mesAutoLoginTried = false;
 let mesState = { status: 'off', message: '', lastSync: null };
 let mesConnectModalInstance = null;
+// Đơn hàng (khách hàng, mã đơn, màu, nhựa) – dùng cho phiếu kiểm hàng đầu tiên (Tab 7). Đọc riêng, 5 phút/lần;
+// lỗi ở đây không ảnh hưởng việc đồng bộ mã khuôn.
+const MES_KEY_ORDERS = ['mold_orders_v12_mes_clean', 'mold_planned_orders_v12_mes_clean'];
+let mesOrders = [];
+let mesOrdersAt = 0;
+async function mesTaiDonHang(force) {
+    if (!mesClient || !mesRunning) return;
+    if (!force && Date.now() - mesOrdersAt < 300000) return;
+    mesOrdersAt = Date.now();
+    try {
+        const { data, error } = await mesClient.rpc('mes_read_nodes', { p_keys: MES_KEY_ORDERS });
+        if (error) throw error;
+        let ds = [];
+        MES_KEY_ORDERS.forEach(k => {
+            let v = data && data[k] && data[k].value;
+            if (v) ds = ds.concat(Array.isArray(v) ? v : Object.values(v));
+        });
+        mesOrders = ds.filter(o => o && typeof o === 'object');
+    } catch (e) {
+        console.warn('PM ép nhựa - không đọc được đơn hàng (phiếu hàng đầu tiên sẽ nhập tay khách hàng / mã đơn):', e);
+    }
+}
 
 function mesInit() {
     if (mesClient) return true;
@@ -158,6 +180,7 @@ async function mesRefresh(full) {
             mesApply(k, node.value);
         });
         mesSetState('ok', '');
+        mesTaiDonHang(false);
     } catch (e) {
         console.warn('PM ép nhựa - lỗi đọc dữ liệu', e);
         mesSetState('error', mesRpcError(e));

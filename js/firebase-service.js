@@ -33,7 +33,7 @@
                             subscribeTabRealtime();
                             if (typeof mesKhoiDong === 'function') mesKhoiDong();
                                 if (typeof inKhoiDong === 'function') inKhoiDong();
-                                if (typeof dkKhoiDong === 'function') dkKhoiDong();
+                                if (typeof dkKhoiDong === 'function') dkKhoiDong(); if (typeof faiKhoiDong === 'function') faiKhoiDong();
                         } else {
                             currentUser = null;
                             // Kiểm tra phiên đăng nhập đã lưu để tự động duy trì đăng nhập

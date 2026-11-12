@@ -361,6 +361,8 @@
                         <td><input type="text" class="form-control form-control-sm t2-note" value="${escapeHtml(rec.note || '')}" placeholder="Mô tả lý do lỗi..."></td>
                     `;
                         tbody.appendChild(tr);
+                        // Tab 7: chưa có phiếu kiểm hàng đầu tiên ĐẠT -> khóa dòng
+                        if (typeof faiChanDongTab2 === 'function') faiChanDongTab2(tr, date, m, shift, rec.moldId);
                     });
                 });
             }

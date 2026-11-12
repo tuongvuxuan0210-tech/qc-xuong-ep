@@ -178,6 +178,8 @@ function qcThuThapLoiTheoNgay(date) {
     });
     // Lỗi do công đoạn sau / khách hàng trả về (Tab 5) – loại lỗi đã chọn sẵn khi nhập
     if (typeof rvThuThapTheoNgay === 'function') list.push(...rvThuThapTheoNgay(date));
+    // Hàng đầu tiên không đạt (Tab 7)
+    if (typeof faiThuThapTheoNgay === 'function') list.push(...faiThuThapTheoNgay(date));
     return list;
 }
 
@@ -592,6 +594,7 @@ function qcLuuPhieuDoiSach() {
         if (qcDoiSachModalInstance) qcDoiSachModalInstance.hide();
         renderTab3();
         if (typeof renderTraVe === 'function') renderTraVe();
+        if (typeof faiRender === 'function') faiRender();
     }).catch(err => alert('⚠️ Lỗi lưu đối sách: ' + err.message));
 }
 

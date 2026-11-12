@@ -130,6 +130,6 @@
             currentTab1DateListener = null; currentTab2DateListener = null;
             if (typeof inStop === 'function') inStop();
             if (typeof rvStop === 'function') rvStop();
-            if (typeof dkStop === 'function') dkStop();
+            if (typeof dkStop === 'function') dkStop(); if (typeof faiStop === 'function') faiStop();
             isRealtimeBound = false;
         }
