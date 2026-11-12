@@ -24,6 +24,11 @@
     <link rel="stylesheet" href="css/style.css?v=20261112">
     <link rel="stylesheet" href="css/xuong-in.css">
     <link rel="stylesheet" href="css/tra-ve.css">
+    <style>
+        /* Tab 7: dòng Tab 2 bị khóa vì chưa có phiếu kiểm hàng đầu tiên đạt */
+        tr.fai-khoa td { background: rgba(127, 127, 127, .12) !important; }
+        tr.fai-khoa select, tr.fai-khoa input:not(.t2-shift-inspector) { opacity: .45; }
+    </style>
 </head>
 <body class="not-logged-in">
 
@@ -112,6 +117,12 @@
                     <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab6DieuKien" type="button"
                         onclick="dkKhoiDong()">
                         🌡️ TAB 6: ĐIỀU KIỆN ÉP (ĐẦU CA &amp; ĐỔI KHUÔN)
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab7HangDau" type="button"
+                        onclick="faiKhoiDong()">
+                        🧪 TAB 7: KIỂM HÀNG ĐẦU TIÊN (首件)
                     </button>
                 </li>
             </ul>
@@ -331,6 +342,11 @@
                 <!-- TAB 6: ĐIỀU KIỆN ÉP + NHẮC VIỆC ZALO -->
                 <div class="tab-pane fade" id="tab6DieuKien" role="tabpanel">
                     <div id="dkRoot"></div>
+                </div>
+
+                <!-- TAB 7: KIỂM TRA KIỆN HÀNG ĐẦU TIÊN -->
+                <div class="tab-pane fade" id="tab7HangDau" role="tabpanel">
+                    <div id="faiRoot"></div>
                 </div>
 
                 <!-- TAB 4: XƯỞNG IN TAMPON – KIỂM TRA HÀNG NGÀY (GIAI ĐOẠN 1 – CƠ BẢN) -->
@@ -981,19 +997,20 @@
     <script src="js/state.js"></script>
     <script src="js/theme.js"></script>
     <script src="js/utils.js?v=chong_ghi_de_20261107"></script>
-    <script src="js/auth.js?v=20261111"></script>
-    <script src="js/firebase-service.js?v=20261111"></script>
-    <script src="js/mes-sync.js?v=supabase_20261029"></script>
+    <script src="js/auth.js?v=fai_20261112"></script>
+    <script src="js/firebase-service.js?v=fai_20261112"></script>
+    <script src="js/mes-sync.js?v=fai_20261112"></script>
     <script src="js/zalo.js?v=20261111"></script>
     <script src="js/image-service.js"></script>
     <script src="js/tab1.js?v=chong_ghi_de_20261107"></script>
-    <script src="js/tab2.js?v=chong_ghi_de_20261107"></script>
-    <script src="js/doi-sach-4m.js"></script>
+    <script src="js/tab2.js?v=fai_20261112"></script>
+    <script src="js/doi-sach-4m.js?v=fai_20261112"></script>
     <script src="js/tab3.js"></script>
     <script src="js/tab-in.js"></script>
     <script src="js/tra-ve.js"></script>
     <script src="js/dieu-kien-ep.js?v=20261112f"></script>
     <script src="js/dk-mo-rong.js?v=20261112d"></script>
+    <script src="js/kiem-dau-lo.js?v=20261112a"></script>
     <script src="js/export-service.js"></script>
     <script src="js/app.js"></script>
 </body>
