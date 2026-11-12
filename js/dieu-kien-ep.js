@@ -778,8 +778,12 @@ async function qcCauNoiChay(tenMay) {
             if (t.tt !== 'cho' && !ket) continue;
             let ref = db.ref(`${DK_PATH_NHAC}/${date}/gui/${id}`);
             if (now - (t.at || 0) > DK_TIN_QUA_HAN_PHUT * 60000) { await ref.update({ tt: 'qua_han' }); continue; }
+            // LƯU Ý Firebase: lần gọi đầu tiên của transaction thường nhận null (dữ liệu chưa có trong bộ nhớ đệm).
+            // Phải trả về null (không phải undefined) để Firebase đọc giá trị thật từ máy chủ rồi gọi lại –
+            // trả undefined sẽ HỦY transaction, khiến tin nằm mãi ở trạng thái "cho".
             let r = await ref.transaction(c => {
-                if (!c || !(c.tt === 'cho' || (c.tt === 'dang_gui' && now - (c.lay || 0) > 15 * 60000))) return undefined;
+                if (!c) return c;
+                if (!(c.tt === 'cho' || (c.tt === 'dang_gui' && now - (c.lay || 0) > 15 * 60000))) return undefined;
                 c.tt = 'dang_gui'; c.lay = now; return c;
             });
             if (r.committed) tin.push({ date, id, nhom: t.nhom, tenNhom: t.tenNhom, text: t.text });
@@ -793,7 +797,7 @@ async function qcCauNoiChay(tenMay) {
 async function qcCauNoiXong(date, id, ok, loi) {
     let ref = db.ref(`${DK_PATH_NHAC}/${date}/gui/${id}`);
     await ref.transaction(c => {
-        if (!c) return undefined;
+        if (!c) return c;   // null lần đầu = chưa có bộ nhớ đệm -> để Firebase đọc lại từ máy chủ
         if (ok) { c.tt = 'da_gui'; c.guiLuc = Date.now(); }
         else { c.lan = (c.lan || 0) + 1; c.tt = c.lan >= 3 ? 'loi' : 'cho'; c.loi = String(loi || '').substring(0, 300); }
         return c;
