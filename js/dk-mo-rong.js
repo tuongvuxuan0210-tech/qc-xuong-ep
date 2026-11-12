@@ -96,6 +96,7 @@ function dkAiCaiDat() {
 // Thu nhỏ ảnh (cạnh dài tối đa 1600px) -> JPEG base64
 function dkAnhNen(file) {
     return new Promise((resolve, reject) => {
+        setTimeout(() => reject(new Error('Xử lý ảnh quá 20 giây – thử chụp lại hoặc chọn ảnh JPG/PNG')), 20000);
         let url = URL.createObjectURL(file), img = new Image();
         img.onload = () => {
             let tl = Math.min(1, 1600 / Math.max(img.width, img.height));
@@ -148,17 +149,28 @@ Trả về DUY NHẤT một đối tượng JSON, không kèm chữ nào khác:
 {"gia_tri": {"<id>": <số>, ...}, "model_may": "<model máy nếu thấy, hoặc chuỗi rỗng>", "ghi_chu": "<ghi chú ngắn nếu có, hoặc chuỗi rỗng>"}`;
 }
 
+const DK_AI_HAN_GIAY = 90; // quá hạn này thì dừng chờ và báo lỗi
 async function dkAiGoi(anh, cauHoi) {
+    let ctl = new AbortController(), hen = setTimeout(() => ctl.abort(), DK_AI_HAN_GIAY * 1000);
+    try { return await dkAiGoiCore(anh, cauHoi, ctl.signal); }
+    catch (e) {
+        if (e && e.name === 'AbortError') throw new Error(`AI không phản hồi sau ${DK_AI_HAN_GIAY} giây (mạng chậm hoặc dịch vụ AI quá tải) – thử lại`);
+        if (e instanceof TypeError) throw new Error('Không kết nối được dịch vụ AI (mất mạng hoặc bị chặn) – ' + e.message);
+        throw e;
+    } finally { clearTimeout(hen); }
+}
+
+async function dkAiGoiCore(anh, cauHoi, signal) {
     let cfg = dkAiCfg, text = '';
     if (cfg.loai === 'claude') {
         let r = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
+            method: 'POST', signal,
             headers: {
                 'content-type': 'application/json', 'x-api-key': cfg.key, 'anthropic-version': '2023-06-01',
                 'anthropic-dangerous-direct-browser-access': 'true'
             },
             body: JSON.stringify({
-                model: cfg.model || DK_AI_MODEL.claude, max_tokens: 4000,
+                model: cfg.model || DK_AI_MODEL.claude, max_tokens: 2500,
                 messages: [{ role: 'user', content: anh.map(d => ({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: d } })).concat([{ type: 'text', text: cauHoi }]) }]
             })
         });
@@ -166,12 +178,17 @@ async function dkAiGoi(anh, cauHoi) {
         if (!r.ok) throw new Error((j.error && j.error.message) || ('Claude API lỗi ' + r.status));
         text = (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
     } else {
+        let mg = String(cfg.model || DK_AI_MODEL.gemini);
+        let genCfg = { responseMimeType: 'application/json' };
+        // Tắt/giảm chế độ "suy nghĩ" của Gemini – đọc số trên ảnh không cần, mà làm chậm nhiều
+        if (/^gemini-2\.5-flash/.test(mg)) genCfg.thinkingConfig = { thinkingBudget: 0 };
+        else if (/^gemini-[3-9]/.test(mg)) genCfg.thinkingConfig = { thinkingLevel: 'low' };
         let r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cfg.model || DK_AI_MODEL.gemini)}:generateContent`, {
-            method: 'POST',
+            method: 'POST', signal,
             headers: { 'content-type': 'application/json', 'x-goog-api-key': cfg.key },
             body: JSON.stringify({
                 contents: [{ parts: anh.map(d => ({ inline_data: { mime_type: 'image/jpeg', data: d } })).concat([{ text: cauHoi }]) }],
-                generationConfig: { responseMimeType: 'application/json' }
+                generationConfig: genCfg
             })
         });
         let j = await r.json().catch(() => ({}));
@@ -193,10 +210,14 @@ async function dkAiChonAnh(input, cheDo) {
     let bao = (t, mau) => { if (tt) { tt.textContent = t; tt.style.color = mau || ''; } };
     let oNhap = [...document.querySelectorAll(cheDo === 'chuan' ? '#dkChuanModalBody .dk-c' : '#dkKiemModalBody .dk-v')];
     let pids = new Set(oNhap.map(i => i.dataset.pid));
+    let t0 = Date.now(), dem = null;
     try {
-        bao(`⏳ AI đang đọc ${files.length} ảnh...`);
+        bao(`⏳ Đang chuẩn bị ${files.length} ảnh...`);
+        dem = setInterval(() => bao(`⏳ AI (${dkAiCfg.loai} · ${dkAiCfg.model || ''}) đang đọc ${files.length} ảnh... ${Math.round((Date.now() - t0) / 1000)} giây`), 1000);
         let anh = await Promise.all(files.map(dkAnhNen));
         let kq = await dkAiGoi(anh, dkAiPrompt(cheDo, pids));
+        clearInterval(dem);
+        let giay = Math.round((Date.now() - t0) / 1000);
         let n = 0;
         oNhap.forEach(i => {
             let v = dkSo(kq.giaTri[i.dataset.pid]);
@@ -213,9 +234,10 @@ async function dkAiChonAnh(input, cheDo) {
             oModel.value = kq.model; n++;
             oModel.style.outline = '2px solid #f59e0b'; oModel.title = 'AI đọc từ ảnh – hãy đối chiếu lại';
         }
-        bao(n ? `✅ AI đã điền ${n} thông số (ô viền vàng) – đối chiếu lại với màn hình máy trước khi lưu.` + (kq.ghiChu ? ' Ghi chú: ' + kq.ghiChu : '')
+        bao(n ? `✅ AI đã điền ${n} thông số sau ${giay} giây (ô viền vàng) – đối chiếu lại với màn hình máy trước khi lưu.` + (kq.ghiChu ? ' Ghi chú: ' + kq.ghiChu : '')
               : '⚠️ AI không đọc được thông số nào từ ảnh. ' + (kq.ghiChu || 'Chụp lại gần và rõ hơn.'), n ? '#10b981' : '#f59e0b');
     } catch (e) {
+        clearInterval(dem);
         console.warn('AI đọc ảnh lỗi:', e);
         bao('❌ AI đọc ảnh lỗi: ' + (e && e.message), '#ef4444');
     }
