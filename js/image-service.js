@@ -314,7 +314,7 @@
                 let noteVal = rec.note ? rec.note : 'Không ghi chú';
 
                 let zaloAlertText = `🚨 [CẢNH BÁO ẢNH LỖI QC]\n` +
-                                    `🏭 Máy: ${machine || '-'}\n` +
+                                    `🏭 Máy: ${qcTenMayDu(machine) || '-'}\n` +
                                     `🔧 Mã khuôn: ${moldVal}\n` +
                                     `📊 Mẫu lỗi: ${sampleRatioStr}\n` +
                                     `⚠️ Loại lỗi: ${ngTypesStr}\n` +
@@ -477,7 +477,7 @@
                 let shiftTimeTag = shiftKeyParts.length >= 2 ? `${shiftKeyParts[0]} - ${shiftKeyParts[1]}` : key;
 
                 let zaloAlertText = `🚨 [CẢNH BÁO ẢNH LỖI QC]\n` +
-                                    `🏭 Máy: M${machineNum} (${shiftTimeTag})\n` +
+                                    `🏭 Máy: ${qcTenMayDu(machineNum)} (${shiftTimeTag})\n` +
                                     `🔧 Mã khuôn: ${moldVal}\n` +
                                     `📊 Mẫu lỗi: ${sampleRatioStr}\n` +
                                     `⚠️ Loại lỗi: ${ngTypesStr}\n` +

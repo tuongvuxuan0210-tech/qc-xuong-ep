@@ -182,7 +182,7 @@ function renderTraVe() {
             <td><span class="badge ${nv.cls} fw-bold">${nv.icon} ${nv.ten}</span><div class="small fw-semibold mt-1">${escapeHtml(r.benTra || '')}</div></td>
             <td class="text-start small"><div class="fw-bold">${escapeHtml(r.maHang || '—')}</div><div>${escapeHtml(r.tenSP || '')}</div>${r.order ? `<div class="opacity-75">📄 ${escapeHtml(r.order)}</div>` : ''}</td>
             <td class="fw-bold text-warning small">${escapeHtml(r.moldId || '—')}</td>
-            <td class="small"><b class="text-info">${escapeHtml(r.may || '—')}</b>${rvWsLabel(r.may) ? `<div class="opacity-75">${rvWsLabel(r.may)}</div>` : ''}<div>${escapeHtml(r.ca || '')}</div>${r.ngaySX ? `<div class="opacity-75">SX ${escapeHtml(qcNgayNgan(r.ngaySX))}</div>` : ''}</td>
+            <td class="small"><b class="text-info">${escapeHtml(qcTenMay(r.may) || '—')}</b>${rvWsLabel(r.may) ? `<div class="opacity-75">${rvWsLabel(r.may)}</div>` : ''}<div>${escapeHtml(r.ca || '')}</div>${r.ngaySX ? `<div class="opacity-75">SX ${escapeHtml(qcNgayNgan(r.ngaySX))}</div>` : ''}</td>
             <td class="fw-bold">${r.slLo ? rvNum(r.slLo).toLocaleString('vi-VN') : '—'}</td>
             <td class="fw-bold text-danger fs-6">${rvNum(r.slTra).toLocaleString('vi-VN')}${tyLe}</td>
             <td class="text-start small"><div class="fw-bold text-danger">${escapeHtml(qcTenLoaiLoi(it.loaiLoi))}</div><div>${escapeHtml(r.moTa || '')}</div><div class="mt-1">${imgHtml}</div></td>
@@ -215,7 +215,7 @@ function rvDsAnh(r) {
 
 function rvHtmlAnhDong(it, idx) {
     let r = it.rec, ds = rvDsAnh(r);
-    let title = `Trả về: ${r.maHang || ''} ${r.tenSP || ''} - ${it.machine}`;
+    let title = `Trả về: ${r.maHang || ''} ${r.tenSP || ''} - ${qcTenMayDu(it.machine)}`;
     // Ảnh cũ (trước khi có nhiều ảnh) lưu ở phiếu Tab 3
     let act = tab3ActionNotesStore[it.date] || {};
     let thumbs = ds.map(([aid, a]) => {
@@ -317,7 +317,7 @@ function rvVeAnhForm() {
 function rvTaoModal() {
     if (document.getElementById('rvModal')) return;
     let loaiOpts = QC_LOAI_LOI_CHUAN.filter(l => !['KHUON_MAY', 'KQ_SP_NG'].includes(l.ma)).map(l => `<option value="${l.ma}">${escapeHtml(l.ten)}</option>`).join('');
-    let mayOpts = Array.from({ length: TOTAL_MACHINES }, (_, i) => i + 1).map(n => `<option value="M${n}">M${n} – ${n <= 10 ? 'Xưởng 2' : 'Xưởng 1'}</option>`).join('');
+    let mayOpts = qcDsMay('ALL').map(n => `<option value="M${n}">${qcTenMay(n)} – Xưởng ${qcSoXuong(n)}</option>`).join('');
     let div = document.createElement('div');
     div.innerHTML = `
     <div class="modal fade" id="rvModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
@@ -521,7 +521,7 @@ async function rvLuu(moDoiSach) {
     rvToast(isNew ? '✅ Đã lưu lỗi trả về.' : '✅ Đã cập nhật.');
     if (anhMoi.length) rvLuuAnh(ngay, id, rec, anhMoi).then(() => renderTraVe());
     if (isNew && rec.nguon === 'KH' && typeof sendZaloAlert === 'function') {
-        sendZaloAlert(`🚚 KHÁCH HÀNG TRẢ VỀ\n📅 Nhận: ${ngay}${rec.benTra ? ' · KH: ' + rec.benTra : ''}\n📦 ${rec.maHang}${rec.tenSP ? ' – ' + rec.tenSP : ''}${rec.order ? ' · ' + rec.order : ''}\n🏭 ${rec.may || '-'} ${rec.ca || ''}${rec.ngaySX ? ' · SX ' + rec.ngaySX : ''}\n❌ ${qcTenLoaiLoi(rec.loaiLoi)}: ${rec.slTra}${rec.slLo ? '/' + rec.slLo : ''} sp${rec.moTa ? '\n📝 ' + rec.moTa : ''}\n👤 ${rec.nguoiNhap}`, ngay);
+        sendZaloAlert(`🚚 KHÁCH HÀNG TRẢ VỀ\n📅 Nhận: ${ngay}${rec.benTra ? ' · KH: ' + rec.benTra : ''}\n📦 ${rec.maHang}${rec.tenSP ? ' – ' + rec.tenSP : ''}${rec.order ? ' · ' + rec.order : ''}\n🏭 ${qcTenMayDu(rec.may) || '-'} ${rec.ca || ''}${rec.ngaySX ? ' · SX ' + rec.ngaySX : ''}\n❌ ${qcTenLoaiLoi(rec.loaiLoi)}: ${rec.slTra}${rec.slLo ? '/' + rec.slLo : ''} sp${rec.moTa ? '\n📝 ' + rec.moTa : ''}\n👤 ${rec.nguoiNhap}`, ngay);
     }
     // Ngày nhận ngoài khoảng đang xem -> nới khoảng để thấy bản ghi vừa lưu
     let { from, to } = rvRange();
@@ -564,7 +564,7 @@ function rvXuatExcel() {
         return {
             'STT': i + 1, 'Ngày Nhận': it.date, 'Nguồn': rvNguonInfo(it.nguon).ten, 'Bên Trả / Khách Hàng': r.benTra || '', 'Người Báo': r.nguoiBao || '',
             'Mã Hàng': r.maHang || '', 'Tên SP': r.tenSP || '', 'Order / Lot': r.order || '', 'Mã Khuôn': r.moldId || '',
-            'Máy': r.may || '', 'Xưởng': rvWsLabel(r.may), 'Ca SX': r.ca || '', 'Ngày SX': r.ngaySX || '',
+            'Máy': qcTenMay(r.may), 'Xưởng': rvWsLabel(r.may), 'Ca SX': r.ca || '', 'Ngày SX': r.ngaySX || '',
             'SL Lô': r.slLo || '', 'SL Trả Về': r.slTra || 0, 'Tỷ Lệ %': rvNum(r.slLo) > 0 ? +(rvNum(r.slTra) / rvNum(r.slLo) * 100).toFixed(1) : '',
             'Loại Lỗi': qcTenLoaiLoi(it.loaiLoi), 'Mô Tả': r.moTa || '',
             'Xử Lý Hàng': r.xuLy || '', 'SL Đạt Sau XL': r.slDat || '', 'SL Hủy': r.slHuy || '', 'Trạng Thái Hàng': r.ttHang || '', 'Ghi Chú XL': r.xuLyNote || '',

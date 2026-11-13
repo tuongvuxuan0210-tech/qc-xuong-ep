@@ -506,7 +506,7 @@ function qcMoPhieuDoiSachItem(it) {
     let ds = it.doiSach || {};
 
     document.getElementById('qcDsThongTin').innerHTML = `
-        <div><b>📅 ${escapeHtml(it.date)}</b> · <b>${escapeHtml(it.machine)}</b> · ${escapeHtml(it.shiftTime)} · QC: ${escapeHtml(it.inspector || '-')}</div>
+        <div><b>📅 ${escapeHtml(it.date)}</b> · <b>${escapeHtml(qcTenMayDu(it.machine))}</b> · ${escapeHtml(it.shiftTime)} · QC: ${escapeHtml(it.inspector || '-')}</div>
         <div>🧩 Khuôn: <b>${escapeHtml(it.moldId || 'Chưa rõ')}</b> · Hạng mục: ${escapeHtml(it.category)} ${it.defectQty > 0 ? `· SL lỗi: <b>${it.defectQty}</b>` : ''}</div>
         <div>📌 Mô tả lỗi: <b class="text-danger">${escapeHtml(it.description)}</b></div>`;
 
@@ -549,7 +549,7 @@ function qcCapNhatLapLaiTrongModal() {
         box.innerHTML = `<div class="qc-ds-lan-dau">🆕 <b>LỖI LẦN ĐẦU</b> – chưa từng ghi nhận lỗi "${escapeHtml(qcTenLoaiLoi(loai))}" trên ${escapeHtml(pt.doiTuongText)}.</div>`;
     } else {
         let dong = pt.truoc.slice().reverse().map(r => `
-            <tr><td>${escapeHtml(r.d)}</td><td><b>${escapeHtml(r.m)}</b></td><td>${escapeHtml(r.mt || '')}</td>
+            <tr><td>${escapeHtml(r.d)}</td><td><b>${escapeHtml(qcTenMayDu(r.m))}</b></td><td>${escapeHtml(r.mt || '')}</td>
             <td class="text-start">${escapeHtml(r.ds || '— chưa có đối sách —')}${r.tt ? ` <span class="badge bg-secondary">${escapeHtml(r.tt)}</span>` : ''}</td></tr>`).join('');
         let tongMay = Object.keys(pt.theoMay).sort().map(m => `${m} ×${pt.theoMay[m].length}`).join(', ');
         box.innerHTML = `<div class="qc-ds-lap-lai">🔁 <b>LỖI LẶP LẠI – LẦN THỨ ${pt.lanThu}</b> trên ${escapeHtml(pt.doiTuongText)}. Đã từng xảy ra ${pt.truoc.length} lần ở: <b>${escapeHtml(tongMay)}</b>
@@ -608,7 +608,7 @@ function qcXuatExcelDoiSach() {
         let ds = it.doiSach || {};
         return {
             'STT': i + 1, 'Ngày Phát Sinh': it.date, 'Nguồn Lỗi': it.source === 'TAB1' ? 'Tab 1' : it.source === 'TAB2' ? 'Tab 2' : (it.nguon === 'KH' ? 'Khách hàng trả về' : 'Công đoạn sau trả về'),
-            'Máy': it.machine, 'Ca / Giờ': it.shiftTime, 'QC Ghi Nhận': it.inspector || '', 'Mã Khuôn': it.moldId || '',
+            'Máy': qcTenMayDu(it.machine), 'Ca / Giờ': it.shiftTime, 'QC Ghi Nhận': it.inspector || '', 'Mã Khuôn': it.moldId || '',
             'Hạng Mục / Loại Lỗi': it.category, 'SL Mẫu Lỗi': it.defectQty || '', 'Mô Tả Lỗi': it.description,
             'Loại Lỗi Chuẩn': qcTenLoaiLoi(it.loaiLoi),
             'Lần Đầu / Lặp Lại': pt.lapLai ? `Lặp lại – lần ${pt.lanThu}` : 'Lần đầu',

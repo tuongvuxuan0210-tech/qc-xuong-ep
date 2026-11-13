@@ -13,7 +13,7 @@
             let date = document.getElementById('tab1Date').value, dayData = tab1Store[date];
             if (!dayData) { alert("Chưa có dữ liệu Tab 1!"); return; }
             let rows = [];
-            for (let m = 1; m <= TOTAL_MACHINES; m++) {
+            for (let m of qcDsMay('ALL')) {
                 ['Ca Ngày', 'Ca Đêm'].forEach(shift => {
                     let shiftInspector = getShiftInspector(dayData, shift, m);
                     let k = `M${m}_${shift}`;
@@ -21,7 +21,7 @@
                     let xFactor = m <= 10 ? 'Xưởng 2' : 'Xưởng 1';
                     rows.push({
                         "Phân Xưởng": xFactor,
-                        "Máy": `M${m}`,
+                        "Máy": qcTenMay(m),
                         "Ca": shift,
                         "QC Ca": shiftInspector,
                         "Mã Khuôn": r.moldId || '',
@@ -45,15 +45,12 @@
             if (!dayData) { alert("Chưa có dữ liệu Tab 2!"); return; }
             let rows = [];
 
-            let startM = 1, endM = TOTAL_MACHINES;
-            if (tab2WorkshopFilter === 'XUONG1') { startM = 1; endM = 10; }
-            else if (tab2WorkshopFilter === 'XUONG2') { startM = 11; endM = 21; }
 
             let visibleShifts = ['Ca Ngày', 'Ca Đêm'];
             if (tab2ShiftFilter === 'NGAY') visibleShifts = ['Ca Ngày'];
             else if (tab2ShiftFilter === 'DEM') visibleShifts = ['Ca Đêm'];
 
-            for (let m = startM; m <= endM; m++) {
+            for (let m of qcDsMay(tab2WorkshopFilter)) {
                 visibleShifts.forEach(shift => {
                     let shiftInspector = getShiftInspector(dayData, shift, m);
                     let allSlots = shift === 'Ca Ngày' ? QC_SLOTS_DAY : QC_SLOTS_NIGHT;
@@ -64,7 +61,7 @@
                         let xFactor = m <= 10 ? 'Xưởng 2' : 'Xưởng 1';
                         rows.push({
                             "Phân Xưởng": xFactor,
-                            "Máy": `M${m}`,
+                            "Máy": qcTenMay(m),
                             "Ca": shift,
                             "Khung Giờ": `${slot} (${getSlotRangeText(slot)})`,
                             "QC Ca": shiftInspector,

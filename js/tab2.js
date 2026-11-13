@@ -108,8 +108,8 @@
 
             if (titleEl) {
                 if (filter === 'XUONG1') titleEl.innerText = 'Kiểm Tra Sản Phẩm Định Kỳ (2 Giờ / Lần) - Xưởng 2 (M1 - M10)';
-                else if (filter === 'XUONG2') titleEl.innerText = 'Kiểm Tra Sản Phẩm Định Kỳ (2 Giờ / Lần) - Xưởng 1 (M11 - M21)';
-                else titleEl.innerText = 'Kiểm Tra Sản Phẩm Định Kỳ (2 Giờ / Lần) - Toàn Xưởng (M1 - M21)';
+                else if (filter === 'XUONG2') titleEl.innerText = 'Kiểm Tra Sản Phẩm Định Kỳ (2 Giờ / Lần) - Xưởng 1 (M1 - M11)';
+                else titleEl.innerText = 'Kiểm Tra Sản Phẩm Định Kỳ (2 Giờ / Lần) - Toàn Xưởng';
             }
             renderTab2();
         }
@@ -217,15 +217,12 @@
 
             let dayData = tab2Store[date] || {};
 
-            let startM = 1, endM = TOTAL_MACHINES;
-            if (tab2WorkshopFilter === 'XUONG1') { startM = 1; endM = 10; }
-            else if (tab2WorkshopFilter === 'XUONG2') { startM = 11; endM = 21; }
 
             let visibleShifts = ['Ca Ngày', 'Ca Đêm'];
             if (tab2ShiftFilter === 'NGAY') visibleShifts = ['Ca Ngày'];
             else if (tab2ShiftFilter === 'DEM') visibleShifts = ['Ca Đêm'];
 
-            for (let m = startM; m <= endM; m++) {
+            for (let m of qcDsMay(tab2WorkshopFilter)) {
                 // Xác định các ca và khung giờ phù hợp với bộ lọc
                 let shiftsToRender = [];
                 visibleShifts.forEach(shift => {
@@ -278,7 +275,7 @@
                         if (imgUrl) {
                             imgHtml = `
                             <div class="d-flex align-items-center justify-content-center gap-1">
-                                <img src="${escapeHtml(imgUrl)}" class="rounded border border-info shadow-sm" style="width:28px; height:28px; object-fit:cover; cursor:pointer;" onclick="previewDefectImage('${escapeHtml(imgUrl)}', 'M${m} (${shift} ${timeSlot}) - Khuôn: ${escapeHtml(rec.moldId || '-')}')" title="Bấm để xem ảnh trực tiếp">
+                                <img src="${escapeHtml(imgUrl)}" class="rounded border border-info shadow-sm" style="width:28px; height:28px; object-fit:cover; cursor:pointer;" onclick="previewDefectImage('${escapeHtml(imgUrl)}', '${qcTenMayDu(m)} (${shift} ${timeSlot}) - Khuôn: ${escapeHtml(rec.moldId || '-')}')" title="Bấm để xem ảnh trực tiếp">
                                 <div class="btn-group btn-group-sm">
                                     <label class="btn btn-xs btn-outline-warning py-0 px-1 m-0" style="font-size:9px; cursor:pointer;" title="Đổi ảnh">
                                         🔄<input type="file" accept="image/*" style="display:none;" onchange="handleTab2DefectImageUpload(this, '${escapeHtml(date)}', '${escapeHtml(key)}', '${m}', '${escapeHtml(rec.moldId)}')">
@@ -290,7 +287,7 @@
                             let viewTarget = driveUrl || driveFile;
                             imgHtml = `
                             <div class="d-flex align-items-center justify-content-center gap-1">
-                                <button type="button" class="btn btn-xs btn-3d-primary rounded-pill py-0 px-2 shadow-sm" style="font-size:9.5px;" onclick="previewDefectImage('${escapeHtml(viewTarget)}', 'M${m} (${shift} ${timeSlot}) - Khuôn: ${escapeHtml(rec.moldId || '-')}')" title="Bấm để xem ảnh">🖼️ Xem</button>
+                                <button type="button" class="btn btn-xs btn-3d-primary rounded-pill py-0 px-2 shadow-sm" style="font-size:9.5px;" onclick="previewDefectImage('${escapeHtml(viewTarget)}', '${qcTenMayDu(m)} (${shift} ${timeSlot}) - Khuôn: ${escapeHtml(rec.moldId || '-')}')" title="Bấm để xem ảnh">🖼️ Xem</button>
                                 <label class="btn btn-xs btn-outline-warning py-0 px-1 m-0" style="font-size:9px; cursor:pointer;" title="Tải ảnh mới / Đổi ảnh">
                                     🔄<input type="file" accept="image/*" style="display:none;" onchange="handleTab2DefectImageUpload(this, '${escapeHtml(date)}', '${escapeHtml(key)}', '${m}', '${escapeHtml(rec.moldId)}')">
                                 </label>
@@ -306,7 +303,7 @@
 
                         let machineCellHtml = '';
                         if (!machineRendered) {
-                            machineCellHtml = `<td rowspan="${totalRowsForMachine}" class="fw-bold sticky-col">M${m}</td>`;
+                            machineCellHtml = `<td rowspan="${totalRowsForMachine}" class="fw-bold sticky-col">${qcOMay(m)}</td>`;
                             machineRendered = true;
                         }
 

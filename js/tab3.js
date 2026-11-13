@@ -101,7 +101,7 @@
                 let imgUrl = actionsData[`${item.key}_img`] || sourceRec.img || '';
                 let driveUrl = actionsData[`${item.key}_drive_url`] || sourceRec.driveUrl || '';
                 let driveFile = actionsData[`${item.key}_drive_file`] || sourceRec.driveFile || '';
-                let titleText = `${item.source === 'TAB1' ? 'Tab 1: ' : item.source === 'TRAVE' ? 'Trả về: ' : 'Tab 2: '} ${item.machine} (${item.shiftTime}) - Khuôn: ${item.moldId || '-'}`;
+                let titleText = `${item.source === 'TAB1' ? 'Tab 1: ' : item.source === 'TRAVE' ? 'Trả về: ' : 'Tab 2: '} ${qcTenMayDu(item.machine)} (${item.shiftTime}) - Khuôn: ${item.moldId || '-'}`;
                 let imgHtml = '';
 
                 if (imgUrl) {
@@ -144,7 +144,7 @@
                 <td class="fw-bold sticky-col">${index + 1}</td>
                 <td class="fw-bold text-info small">${escapeHtml(item.date)}</td>
                 <td>${badgeSource}</td>
-                <td class="fw-bold text-info">${escapeHtml(item.machine)}</td>
+                <td class="fw-bold text-info">${escapeHtml(qcTenMayDu(item.machine))}</td>
                 <td class="small fw-semibold">${escapeHtml(item.shiftTime)}</td>
                 <td class="text-info fw-bold small">${escapeHtml(item.inspector || '-')}</td>
                 <td class="fw-bold text-warning">${escapeHtml(item.moldId || 'Chưa rõ')}</td>
@@ -216,7 +216,7 @@
             let reasonsMachinesMap = {};
 
             let machinesData = {};
-            for (let m = 1; m <= TOTAL_MACHINES; m++) {
+            for (let m of qcDsMay('ALL')) {
                 machinesData[`M${m}`] = {
                     machine: `M${m}`,
                     machineNum: m,
@@ -384,7 +384,7 @@
             // Cập nhật badge phạm vi xưởng và ca theo bộ lọc trên đầu
             let scopeBadgeEl = document.getElementById('t2ChartScopeBadge');
             if (scopeBadgeEl) {
-                let wsText = tab3WorkshopFilter === 'XUONG1' ? '🏭 Xưởng 2 (M1-10)' : (tab3WorkshopFilter === 'XUONG2' ? '🏭 Xưởng 1 (M11-21)' : '🌐 Toàn Xưởng');
+                let wsText = tab3WorkshopFilter === 'XUONG1' ? '🏭 Xưởng 2 (M1-10)' : (tab3WorkshopFilter === 'XUONG2' ? '🏭 Xưởng 1 (M1-11)' : '🌐 Toàn Xưởng');
                 let shiftText = tab3ShiftFilter === 'NGAY' ? '☀️ Ca Ngày' : (tab3ShiftFilter === 'DEM' ? '🌙 Ca Đêm' : '☀️🌙 Cả Ca');
                 scopeBadgeEl.innerText = `${wsText} | ${shiftText}`;
             }
@@ -407,7 +407,7 @@
             Object.values(stats.machinesData).forEach(m => {
                 if (m.defectQty > maxDefect) {
                     maxDefect = m.defectQty;
-                    topMachineName = `${m.machine} (${m.defectQty} SP lỗi)`;
+                    topMachineName = `${qcTenMayDu(m.machine)} (${m.defectQty} SP lỗi)`;
                 }
             });
             if (kpiTopM) kpiTopM.innerText = maxDefect > 0 ? topMachineName : '🎉 Không có lỗi';
@@ -818,7 +818,7 @@
                 chartTab2MachinesInst = new Chart(ctxMachines, {
                     type: 'bar',
                     data: {
-                        labels: machineKeys,
+                        labels: machineKeys.map(k => qcTenMay(k)),   // tên gọi tại xưởng; màu cột phân biệt 2 xưởng
                         datasets: [{
                             label: 'Số SP Lỗi (Chiếc)',
                             data: defectCounts,
@@ -841,13 +841,13 @@
                                 padding: 10,
                                 callbacks: {
                                     title: function(ctxArr) {
-                                        let k = ctxArr[0].label;
+                                        let k = machineKeys[ctxArr[0].dataIndex];
                                         let m = stats.machinesData[k];
                                         let wsName = m.workshop === 'XUONG1' ? 'Xưởng 2' : 'Xưởng 1';
-                                        return `Máy ${k} (${wsName})`;
+                                        return `Máy ${qcTenMay(k)} (${wsName})`;
                                     },
                                     label: function(ctx) {
-                                        let k = ctx.label;
+                                        let k = machineKeys[ctx.dataIndex];
                                         let m = stats.machinesData[k];
                                         let moldsStr = m.molds.size > 0 ? Array.from(m.molds).join(', ') : 'Chưa rõ';
                                         return [

@@ -138,8 +138,8 @@
 
             if (titleEl) {
                 if (filter === 'XUONG1') titleEl.innerText = 'Thông Số Vận Hành Máy Ép Haitian & Tình Trạng Khuôn - Xưởng 2 (M1 - M10)';
-                else if (filter === 'XUONG2') titleEl.innerText = 'Thông Số Vận Hành Máy Ép Haitian & Tình Trạng Khuôn - Xưởng 1 (M11 - M21)';
-                else titleEl.innerText = 'Thông Số Vận Hành Máy Ép Haitian & Tình Trạng Khuôn - Toàn Xưởng (M1 - M21)';
+                else if (filter === 'XUONG2') titleEl.innerText = 'Thông Số Vận Hành Máy Ép Haitian & Tình Trạng Khuôn - Xưởng 1 (M1 - M11)';
+                else titleEl.innerText = 'Thông Số Vận Hành Máy Ép Haitian & Tình Trạng Khuôn - Toàn Xưởng';
             }
             renderTab1();
         }
@@ -311,15 +311,12 @@
 
             let dayData = tab1Store[date] || {};
 
-            let startM = 1, endM = TOTAL_MACHINES;
-            if (tab1WorkshopFilter === 'XUONG1') { startM = 1; endM = 10; }
-            else if (tab1WorkshopFilter === 'XUONG2') { startM = 11; endM = 21; }
 
             let visibleShifts = ['Ca Ngày', 'Ca Đêm'];
             if (tab1ShiftFilter === 'NGAY') visibleShifts = ['Ca Ngày'];
             else if (tab1ShiftFilter === 'DEM') visibleShifts = ['Ca Đêm'];
 
-            for (let m = startM; m <= endM; m++) {
+            for (let m of qcDsMay(tab1WorkshopFilter)) {
                 visibleShifts.forEach((shift, sIdx) => {
                     let shiftKey = `M${m}_${shift}`;
                     let key = shiftKey;
@@ -384,7 +381,7 @@
                     if (imgUrl) {
                         imgHtml = `
                         <div class="d-flex align-items-center justify-content-center gap-1">
-                            <img src="${escapeHtml(imgUrl)}" class="rounded border border-info shadow-sm" style="width:28px; height:28px; object-fit:cover; cursor:pointer;" onclick="previewDefectImage('${escapeHtml(imgUrl)}', 'Tab 1: M${m} (${shift}) - Khuôn: ${escapeHtml(rec.moldId || '-')}')" title="Bấm để xem ảnh trực tiếp">
+                            <img src="${escapeHtml(imgUrl)}" class="rounded border border-info shadow-sm" style="width:28px; height:28px; object-fit:cover; cursor:pointer;" onclick="previewDefectImage('${escapeHtml(imgUrl)}', 'Tab 1: ${qcTenMayDu(m)} (${shift}) - Khuôn: ${escapeHtml(rec.moldId || '-')}')" title="Bấm để xem ảnh trực tiếp">
                             <div class="btn-group btn-group-sm">
                                 <label class="btn btn-xs btn-outline-warning py-0 px-1 m-0" style="font-size:9px; cursor:pointer;" title="Đổi ảnh">
                                     🔄<input type="file" accept="image/*" style="display:none;" onchange="handleTab1DefectImageUpload(this, '${escapeHtml(date)}', '${escapeHtml(key)}', '${m}', '${escapeHtml(rec.moldId)}')">
@@ -396,7 +393,7 @@
                         let viewTarget = driveUrl || driveFile;
                         imgHtml = `
                         <div class="d-flex align-items-center justify-content-center gap-1">
-                            <button type="button" class="btn btn-xs btn-3d-primary rounded-pill py-0 px-2 shadow-sm" style="font-size:9.5px;" onclick="previewDefectImage('${escapeHtml(viewTarget)}', 'Tab 1: M${m} (${shift}) - Khuôn: ${escapeHtml(rec.moldId || '-')}')" title="Bấm để xem ảnh">🖼️ Xem</button>
+                            <button type="button" class="btn btn-xs btn-3d-primary rounded-pill py-0 px-2 shadow-sm" style="font-size:9.5px;" onclick="previewDefectImage('${escapeHtml(viewTarget)}', 'Tab 1: ${qcTenMayDu(m)} (${shift}) - Khuôn: ${escapeHtml(rec.moldId || '-')}')" title="Bấm để xem ảnh">🖼️ Xem</button>
                             <label class="btn btn-xs btn-outline-warning py-0 px-1 m-0" style="font-size:9px; cursor:pointer;" title="Tải ảnh mới / Đổi ảnh">
                                 🔄<input type="file" accept="image/*" style="display:none;" onchange="handleTab1DefectImageUpload(this, '${escapeHtml(date)}', '${escapeHtml(key)}', '${m}', '${escapeHtml(rec.moldId)}')">
                             </label>
@@ -437,7 +434,7 @@
 
                     let tr = document.createElement('tr');
                     tr.innerHTML = `
-                    ${sIdx === 0 ? `<td rowspan="${visibleShifts.length}" class="fw-bold sticky-col">M${m}</td>` : ''}
+                    ${sIdx === 0 ? `<td rowspan="${visibleShifts.length}" class="fw-bold sticky-col">${qcOMay(m)}</td>` : ''}
                     <td><span class="${shift === 'Ca Ngày' ? 'shift-icon-day' : 'shift-icon-night'}">${shiftIcon} ${shift}</span></td>
                     <td><input type="text" class="form-control form-control-sm text-center fw-bold t1-shift-inspector text-info" value="${escapeHtml(shiftInspector)}" placeholder="QC Ca" data-shiftkey="${shiftKey}" data-shift="${shift}" data-machine="${m}" data-workshop="${getMachineWorkshop(m)}" oninput="onTab1InspectorChange('${shift}', this.value, ${m})"></td>
                     <td>${qcMoldCellHtml('t1-mold', key, rec.moldId, moldSrc)}</td>

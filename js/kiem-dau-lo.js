@@ -56,8 +56,8 @@ let faiAct = {};            // ngày -> qc_tab3_actions_v1 (để biết đối 
 
 // ===================== 0. TIỆN ÍCH =====================
 function faiCaKey(ca) { return String(ca).includes('Đêm') ? 'Dem' : 'Ngay'; }
-function faiNhom(m) { return typeof dkNhomTheoMay === 'function' ? dkNhomTheoMay(m) : { ma: m >= 11 ? 'X1' : 'X2', xuong: m >= 11 ? 'XƯỞNG 1 (M11-M21)' : 'XƯỞNG 2 (M1-M10)' }; }
-function faiToSX(m) { return (parseInt(m) || 0) >= 11 ? 'Xưởng 1 (M11–M21)' : 'Xưởng 2 (M1–M10)'; }
+function faiNhom(m) { return typeof dkNhomTheoMay === 'function' ? dkNhomTheoMay(m) : { ma: m >= 11 ? 'X1' : 'X2', xuong: m >= 11 ? 'XƯỞNG 1 (M1-M11)' : 'XƯỞNG 2 (M1-M10)' }; }
+function faiToSX(m) { return (parseInt(m) || 0) >= 11 ? 'Xưởng 1 (M1–M11)' : 'Xưởng 2 (M1–M10)'; }
 function faiSo(v) { let n = parseFloat(String(v === undefined || v === null ? '' : v).replace(',', '.')); return isNaN(n) ? NaN : n; }
 function faiKhoaMau(s) { return String(s || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ''); }
 function faiDsNgay(date) { let o = faiStore[date] || {}; return Object.keys(o).map(id => Object.assign({ id }, o[id])).filter(r => r && r.may && !r.daXoa); }
@@ -164,7 +164,7 @@ function faiPhieuMoi(date, ca, m, mold, lyDo, tuDong) {
     let stt = Object.values(faiStore[date] || {}).filter(r => r && parseInt(r.may) === parseInt(m)).length + 1;
     let p = String(date).split('-');
     return {
-        soPhieu: `FAI-${p[0].slice(2)}${p[1]}${p[2]}-M${m}-${String(stt).padStart(2, '0')}${tuDong ? '' : 'T'}`,
+        soPhieu: `FAI-${p[0].slice(2)}${p[1]}${p[2]}-${qcTenMayGon(m).replace('-', '')}-${String(stt).padStart(2, '0')}${tuDong ? '' : 'T'}`,
         date, ca, may: parseInt(m), moldId: mold, lyDo, tuDong: !!tuDong,
         taoLuc: now, taoBoi: (currentUser && currentUser.email) || '',
         sx: Object.assign(sx, { slKiem: '', loai: 'TP' }),
@@ -226,11 +226,11 @@ async function faiTick() {
             let nhom = faiNhom(r.may).ma;
             if (r.trangThai === 'cho' && now > (r.taoLuc || 0) + FAI_HAN_PHUT * 60000) {
                 if (await dkNhacGiuCho(date, `FAI_${id}`, now))
-                    viec[nhom].cho.push(`  • M${r.may} – khuôn ${r.moldId} (${(FAI_LY_DO[r.lyDo] || {}).ten || r.lyDo}, từ ${dkGio(r.taoLuc)})`);
+                    viec[nhom].cho.push(`  • ${qcTenMay(r.may)} – khuôn ${r.moldId} (${(FAI_LY_DO[r.lyDo] || {}).ten || r.lyDo}, từ ${dkGio(r.taoLuc)})`);
             }
             if (r.trangThai === 'khong_dat' && !qcDu4M(act[`FAI_${id}_4m`]) && now > ((r.qc && r.qc.kiemLuc) || 0) + FAI_HAN_PHUT * 60000) {
                 if (await dkNhacGiuCho(date, `FAI4M_${id}`, now))
-                    viec[nhom].m4.push(`  • M${r.may} – khuôn ${r.moldId} – phiếu ${r.soPhieu}`);
+                    viec[nhom].m4.push(`  • ${qcTenMay(r.may)} – khuôn ${r.moldId} – phiếu ${r.soPhieu}`);
             }
         }
         for (let ma of ['X1', 'X2']) {
@@ -308,7 +308,7 @@ function faiRender() {
             <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
                 <input type="date" class="form-control form-control-sm fw-bold" style="width:150px;" id="faiDate" onchange="faiXem.date=this.value; faiNghe(this.value); faiRender()">
                 <select class="form-select form-select-sm fw-bold" style="width:160px;" onchange="faiXem.xuong=this.value; faiRender()">
-                    <option value="ALL">Tất cả xưởng</option><option value="X2">Xưởng 2 (M1–M10)</option><option value="X1">Xưởng 1 (M11–M21)</option>
+                    <option value="ALL">Tất cả xưởng</option><option value="X1">Xưởng 1 (M1–M11)</option><option value="X2">Xưởng 2 (M1–M10)</option>
                 </select>
                 <select class="form-select form-select-sm fw-bold" style="width:130px;" onchange="faiXem.ca=this.value; faiRender()">
                     <option value="ALL">Cả 2 ca</option><option value="Ca Ngày">Ca Ngày</option><option value="Ca Đêm">Ca Đêm</option>
@@ -351,7 +351,7 @@ function faiRender() {
         let sp = (r.sx && (r.sx.tenSP || r.sx.maSP)) || '';
         return `<tr>
             <td class="small fw-bold">${escapeHtml(r.soPhieu || '')}</td>
-            <td class="fw-bold">M${r.may}</td>
+            <td class="fw-bold">${qcOMay(r.may)}</td>
             <td class="small">${escapeHtml(r.ca)}</td>
             <td class="text-start"><div class="fw-bold text-warning">${escapeHtml(r.moldId || '')}</div><div class="small opacity-75 text-truncate" style="max-width:260px;">${escapeHtml(sp)}</div></td>
             <td class="small">${escapeHtml((FAI_LY_DO[r.lyDo] || {}).ten || r.lyDo || '')}${r.tuDong ? '<br><small class="opacity-75">tự tạo</small>' : ''}</td>
@@ -387,7 +387,7 @@ function faiXoaPhieu(date, id) {
     let r = (faiStore[date] || {})[id];
     if (!r) return;
     let canhBao = r.trangThai !== 'cho' ? `\n⚠️ Phiếu này ĐÃ KIỂM (${r.trangThai === 'dat' ? 'ĐẠT' : 'KHÔNG ĐẠT'}) – xóa sẽ mất kết quả.` : '';
-    if (!confirm(`Xóa phiếu ${r.soPhieu} (M${r.may} · ${r.moldId})?${canhBao}`)) return;
+    if (!confirm(`Xóa phiếu ${r.soPhieu} (${qcTenMayDu(r.may)} · ${r.moldId})?${canhBao}`)) return;
     db.ref(`${FAI_PATH}/${date}/${id}`).update({ daXoa: true, xoaBoi: (currentUser && currentUser.email) || '', xoaLuc: Date.now() })
         .catch(e => alert('❌ Không xóa được: ' + e.message));
 }
@@ -401,7 +401,7 @@ function faiTaoPhieuTay(date, ca, m, lyDo) {
         `<button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3" data-bs-dismiss="modal">Đóng</button>
          <button type="button" class="btn btn-sm btn-3d-emerald px-4" onclick="faiLuuTaoTay()">Tạo phiếu</button>`);
     let mayOpts = '';
-    for (let i = 1; i <= TOTAL_MACHINES; i++) mayOpts += `<option value="${i}" ${i === parseInt(m) ? 'selected' : ''}>M${i}</option>`;
+    qcDsMay('ALL').forEach(i => { mayOpts += `<option value="${i}" ${i === parseInt(m) ? 'selected' : ''}>${qcTenMay(i)} – Xưởng ${qcSoXuong(i)}</option>`; });
     document.getElementById('faiTaoModalBody').innerHTML = `
         <div class="row g-2">
             <div class="col-6"><label class="small fw-bold">Ngày</label><input type="date" class="form-control form-control-sm" id="faiTNgay" value="${date}"></div>
@@ -475,7 +475,7 @@ async function faiMoPhieu(date, id) {
          <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3" onclick="faiIn('${date}', '${id}')">🖨️ In A5</button>
          <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3" data-bs-dismiss="modal">Đóng</button>
          <button type="button" class="btn btn-sm btn-3d-emerald px-4" onclick="faiLuuPhieu()">💾 Lưu kết quả</button>`;
-    document.getElementById('faiModalTitle').textContent = `🧪 ${rec.soPhieu} · M${rec.may} · ${rec.moldId}`;
+    document.getElementById('faiModalTitle').textContent = `🧪 ${rec.soPhieu} · ${qcTenMayDu(rec.may)} · ${rec.moldId}`;
 
     let chonKq = (ma, v, khoa) => `
         <div class="btn-group btn-group-sm" role="group">
@@ -712,9 +712,9 @@ async function faiLuuPhieu() {
         let nhom = faiNhom(rec.may);
         let dong = FAI_MUC.filter(m => muc[m.ma].kq === 'KDAT').map(m => `  • ${m.ten}: ${muc[m.ma].loi || 'Không đạt'}`)
             .concat(them.filter(t => t.kq === 'KDAT').map(t => `  • ${t.ten}: ${t.loi || 'Không đạt'}`));
-        dkXepTinZalo(nhom.ma, `🚨 [HÀNG ĐẦU TIÊN KHÔNG ĐẠT – ${nhom.xuong}]\n📅 ${dkNgayNgan(date)} · ${rec.ca} · M${rec.may} · Khuôn ${rec.moldId}\n` +
+        dkXepTinZalo(nhom.ma, `🚨 [HÀNG ĐẦU TIÊN KHÔNG ĐẠT – ${nhom.xuong}]\n📅 ${dkNgayNgan(date)} · ${rec.ca} · ${qcTenMay(rec.may)} · Khuôn ${rec.moldId}\n` +
             `📄 Phiếu ${rec.soPhieu} (${(FAI_LY_DO[up.lyDo] || {}).ten || ''}) · ${sx.tenSP || ''}\n👤 QC: ${nguoi}\n${dong.join('\n')}` +
-            `\n🔒 Tab 2 của M${rec.may} bị khóa đến khi kiểm lại đạt. Cần lập đối sách 4M.`).catch(e => console.warn('Không xếp được tin Zalo:', e));
+            `\n🔒 Tab 2 của ${qcTenMay(rec.may)} bị khóa đến khi kiểm lại đạt. Cần lập đối sách 4M.`).catch(e => console.warn('Không xếp được tin Zalo:', e));
         if (confirm('Phiếu KHÔNG ĐẠT – đã gửi cảnh báo Zalo.\nLập đối sách 4M ngay bây giờ?')) setTimeout(() => faiMo4M(date, id), 400);
     }
 }
@@ -851,7 +851,7 @@ td, th { border: 0.6pt solid #000; padding: 0.7mm 1.2mm; vertical-align: middle;
 <tr><td class="l"><span class="k">报告编号</span><br>Mã số báo cáo</td><td><b>${e(r.soPhieu)}</b></td><td colspan="2">日期 Ngày <b>${p[2]}</b> Tháng <b>${p[1]}</b> Năm <b>${p[0]}</b> · ${e(r.ca)}</td></tr>
 <tr><td colspan="4" class="i">此部分由提供首件的生产部分组别填写 – Hạng mục này dành cho bộ phận sản xuất kiện hàng đầu tiên điền</td></tr>
 <tr><td class="l"><span class="k">生产组别</span><br>Tổ sản xuất</td><td>${e(sx.to)}</td><td class="l"><span class="k">客户名称</span><br>Tên khách hàng</td><td>${e(sx.khach)}</td></tr>
-<tr><td><span class="k">机台 / 模具编号</span><br>Máy số / Mã khuôn</td><td><b>M${r.may}</b> / ${e(r.moldId)}</td><td><span class="k">订单编号</span><br>Mã số đơn hàng</td><td>${e(sx.donHang)}</td></tr>
+<tr><td><span class="k">机台 / 模具编号</span><br>Máy số / Mã khuôn</td><td><b>${qcTenMayDu(r.may)}</b> / ${e(r.moldId)}</td><td><span class="k">订单编号</span><br>Mã số đơn hàng</td><td>${e(sx.donHang)}</td></tr>
 <tr><td><span class="k">产品名称</span><br>Tên sản phẩm</td><td>${e(sx.tenSP)}${sx.mau || sx.nhua ? `<br><span class="k">Màu: ${e(sx.mau)} · Nhựa: ${e(sx.nhua)}</span>` : ''}</td><td><span class="k">送检数量</span><br>Số lượng đưa kiểm</td><td><b>${e(sx.slKiem)}</b></td></tr>
 <tr><td colspan="2"><span class="k">成品</span> Thành phẩm ${o(sx.loai !== 'BTP')} &nbsp;&nbsp; <span class="k">半成品</span> Bán thành phẩm ${o(sx.loai === 'BTP')}</td><td colspan="2"></td></tr>
 <tr><td><span class="k">送检原因</span><br>Nguyên nhân đưa kiểm</td><td colspan="3">${faiLyDoChon().map(k => `${o(r.lyDo === k)} ${FAI_LY_DO[k].ten}`).join(' &nbsp; ')}</td></tr>
@@ -888,7 +888,7 @@ async function faiXuatExcel() {
                 let sx = r.sx || {}, qc = r.qc || {}, muc = qc.muc || {};
                 let t = v => v === 'DAT' ? 'Đạt' : v === 'KDAT' ? 'Không đạt' : '';
                 let loi = FAI_MUC.filter(m => (muc[m.ma] || {}).loi).map(m => `${m.ten}: ${muc[m.ma].loi}`).join('; ');
-                rows.push([ngay, r.ca, r.soPhieu, `M${r.may}`, r.moldId, sx.tenSP || '', sx.khach || '', sx.donHang || '', sx.mau || '', sx.nhua || '',
+                rows.push([ngay, r.ca, r.soPhieu, `${qcTenMayDu(r.may)}`, r.moldId, sx.tenSP || '', sx.khach || '', sx.donHang || '', sx.mau || '', sx.nhua || '',
                     (FAI_LY_DO[r.lyDo] || {}).ten || r.lyDo, sx.slKiem || '', sx.loai === 'BTP' ? 'Bán thành phẩm' : 'Thành phẩm',
                     t((muc.ngoai || {}).kq), t((muc.mau || {}).kq), t((muc.kt || {}).kq), t((muc.lapRap || {}).kq), t((muc.tsMay || {}).kq), loi,
                     r.trangThai === 'dat' ? 'ĐẠT' : r.trangThai === 'khong_dat' ? 'KHÔNG ĐẠT' : 'Chờ kiểm', qc.nguoiKiem || '', qc.kiemLuc ? dkGio(qc.kiemLuc) : '', qc.ghiChu || '']);

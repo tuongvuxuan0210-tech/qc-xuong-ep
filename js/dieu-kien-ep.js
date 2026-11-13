@@ -28,10 +28,18 @@ const DK_CAU_NOI_TRE_PHUT = 10;   // quá số phút này không thấy máy g�
 
 // Nhóm Zalo theo xưởng (tên xưởng theo cách gọi tại xưởng: Xưởng 1 = M11-M21, Xưởng 2 = M1-M10)
 const DK_NHOM_ZALO = {
-    X1: { ma: 'X1', xuong: 'XƯỞNG 1 (M11-M21)', nhom: 'Nhóm Quản lí và TT 2NM' },
+    X1: { ma: 'X1', xuong: 'XƯỞNG 1 (M1-M11)', nhom: 'Nhóm Quản lí và TT 2NM' },
     X2: { ma: 'X2', xuong: 'XƯỞNG 2 (M1-M10)', nhom: 'SẢN XUẤT XƯỞNG ÉP MỚI' }
 };
 function dkNhomTheoMay(m) { return (parseInt(m) || 0) >= 11 ? DK_NHOM_ZALO.X1 : DK_NHOM_ZALO.X2; }
+// Số máy gọi tại xưởng: Xưởng 1 đánh số M1-M11 (mã nội bộ / PM ép nhựa: M11-M21), Xưởng 2 M1-M10 (giữ nguyên).
+// Dữ liệu Firebase và PM ép nhựa vẫn dùng mã nội bộ 1-21; chỉ đổi tên hiển thị.
+const DK_THU_TU_MAY = QC_THU_TU_MAY;   // Xưởng 1 trước, rồi Xưởng 2 (xem js/config.js)
+function dkSoMay(m) { return qcSoMay(m); }
+function dkTenMay(m) { return qcTenMay(m); }
+function dkTenMayDu(m) { return qcTenMayDu(m); }
+function dkTenTuKhoa(k) { return qcTenMayDu(k); }   // 'M12' (mã nội bộ) -> 'M2 (Xưởng 1)'
+function dkViTriMay(m) { let i = DK_THU_TU_MAY.indexOf(parseInt(m)); return i < 0 ? 99 : i; }
 
 // ===================== 1. DANH MỤC THÔNG SỐ =====================
 // kieu: 'pm' = chuẩn ± dung sai | 'min' = thực tế ≥ chuẩn | 'max' = thực tế ≤ chuẩn
@@ -91,6 +99,7 @@ let dkChecks = {};                // { ngày: { M<m>_<ca>: { khuôn: bản ghi }
 let dkNhacNgay = {};              // dữ liệu nhắc của ngày làm việc hiện tại (cur + log)
 let dkBound = false, dkCheckListener = null;
 let dkXem = { date: '', ca: '', xuong: 'ALL' };
+let dkThuVienLoc = { xuong: 'ALL' };   // bộ lọc xưởng trong danh sách bản chuẩn (giữ lại giữa các lần mở)
 let dkDangSua = null, dkDangKiem = null;
 let dkModalChuan = null, dkModalKiem = null, dkModalThuVien = null;
 let dkNhacTimer = null, dkNhacBusy = false, dkNhacLoi = '';
@@ -267,7 +276,7 @@ function dkDungKhung() {
             </div>
             <div class="d-flex align-items-center gap-2 flex-wrap">
                 <select id="dkLocXuong" class="form-select form-select-sm fw-bold" style="width:150px;" onchange="dkXem.xuong=this.value; dkRender()">
-                    <option value="ALL">🌐 Toàn xưởng</option><option value="X1">🏭 Xưởng 1 (M11-21)</option><option value="X2">🏭 Xưởng 2 (M1-10)</option>
+                    <option value="ALL">🌐 Toàn xưởng</option><option value="X1">🏭 Xưởng 1 (M1-11)</option><option value="X2">🏭 Xưởng 2 (M1-10)</option>
                 </select>
                 <select id="dkLocCa" class="form-select form-select-sm fw-bold" style="width:120px;" onchange="dkXem.ca=this.value; dkRender()">
                     <option value="Ca Ngày">☀️ Ca Ngày</option><option value="Ca Đêm">🌙 Ca Đêm</option>
@@ -325,13 +334,13 @@ function dkRender() {
         cb.innerHTML = ds.map(t => `<div class="alert alert-warning py-1 px-2 my-2 small fw-bold">${t}</div>`).join('');
     }
     let date = dkXem.date, ca = dkXem.ca, ht = dkCaHienTai(), laCaHienTai = (date === ht.date && ca === ht.ca);
-    let tu = 1, den = TOTAL_MACHINES;
-    if (dkXem.xuong === 'X1') tu = 11; else if (dkXem.xuong === 'X2') den = 10;
+    let dsMay = DK_THU_TU_MAY.filter(m => m <= TOTAL_MACHINES && (dkXem.xuong === 'ALL' || dkNhomTheoMay(m).ma === dkXem.xuong));
     let html = '', now = Date.now();
-    for (let m = tu; m <= den; m++) {
+    for (let m of dsMay) {
+        if (dkXem.xuong === 'ALL' && (m === 1 || m === 11)) html += dkDongXuong(dkNhomTheoMay(m), 6);
         let mold = dkKhuonDangChay(date, m, ca);
         if (!mold) {
-            html += `<tr class="opacity-50"><td class="fw-bold sticky-col">M${m}</td><td colspan="5" class="small fst-italic">Máy không chạy</td></tr>`;
+            html += `<tr class="opacity-50"><td class="fw-bold sticky-col">${dkTenMay(m)}</td><td colspan="5" class="small fst-italic">Máy không chạy</td></tr>`;
             continue;
         }
         let std = dkLayChuan(mold, m), chk = dkLayCheck(date, m, ca, mold);
@@ -345,7 +354,7 @@ function dkRender() {
                 ? `<span class="badge bg-danger px-2 py-2">❌ NG (${soNG} thông số)</span>`
                 : `<span class="badge bg-success px-2 py-2">✅ ĐẠT</span>`;
             nguoi = `${escapeHtml(chk.by || '')}<br><small class="opacity-75">${chk.at ? dkGio(new Date(chk.at).getTime()) : ''} · ${chk.loai === 'doi_khuon' ? 'Đổi khuôn' : 'Đầu ca'}</small>`
-                + (chk.theoGoc ? `<br><small class="text-info">📋 theo bản gốc ${escapeHtml(chk.theoGoc)}</small>` : '');
+                + (chk.theoGoc ? `<br><small class="text-info">📋 theo bản gốc ${escapeHtml(dkTenTuKhoa(chk.theoGoc))}</small>` : '');
         } else if (laCaHienTai) {
             let han = ((cur && cur.mold === mold && cur.since) || ht.batDau) + DK_HAN_PHUT * 60000;
             tt = now > han
@@ -357,14 +366,14 @@ function dkRender() {
         let chuanHtml = std
             ? `<button type="button" class="btn btn-sm btn-outline-info py-0 px-2 rounded-pill" data-act="chuan" data-m="${m}" data-mold="${escapeHtml(mold)}" style="font-size:11px;" title="Cập nhật ${escapeHtml(std.updatedAt || '')} – ${escapeHtml(std.updatedBy || '')}">📄 Đã có · sửa</button>`
             : goc
-            ? `<div class="small fw-bold text-info">📋 Theo bản gốc M${goc.m}</div>
-               <button type="button" class="btn btn-sm btn-3d-amber py-0 px-2 mt-1" data-act="chepgoc" data-m="${m}" data-mold="${escapeHtml(mold)}" style="font-size:11px;" title="Mở bản chuẩn mới cho M${m}, điền sẵn dữ liệu bản gốc M${goc.m} để kỹ thuật soát lại">📋 Lập bản riêng (chép M${goc.m})</button>`
+            ? `<div class="small fw-bold text-info">📋 Theo bản gốc ${dkTenMayDu(goc.m)}</div>
+               <button type="button" class="btn btn-sm btn-3d-amber py-0 px-2 mt-1" data-act="chepgoc" data-m="${m}" data-mold="${escapeHtml(mold)}" style="font-size:11px;" title="Mở bản chuẩn mới cho ${dkTenMayDu(m)}, điền sẵn dữ liệu bản gốc ${dkTenMayDu(goc.m)} để kỹ thuật soát lại">📋 Lập bản riêng (chép ${dkTenMayDu(goc.m)})</button>`
             : `<button type="button" class="btn btn-sm btn-3d-amber py-0 px-2" data-act="chuan" data-m="${m}" data-mold="${escapeHtml(mold)}" style="font-size:11px;">➕ Lập bản chuẩn</button>`;
         let thaoTac = (std || goc)
             ? `<button type="button" class="btn btn-sm ${chk ? 'btn-outline-info' : 'btn-3d-emerald'} py-1 px-3 fw-bold" data-act="kiem" data-m="${m}" style="font-size:12px;">${chk ? '👁️ Xem / kiểm lại' : '📝 Kiểm tra'}</button>`
             : `<small class="text-warning fw-bold">Chưa có bản chuẩn</small>`;
         html += `<tr>
-            <td class="fw-bold sticky-col">M${m}</td>
+            <td class="fw-bold sticky-col">${dkTenMay(m)}</td>
             <td class="fw-bold text-warning">${escapeHtml(mold)}${doiKhuon ? `<br><small class="text-info">🔁 đổi khuôn ${dkGio(cur.since)}</small>` : ''}</td>
             <td>${chuanHtml}</td><td>${tt}</td><td class="small">${nguoi}</td><td>${thaoTac}</td></tr>`;
     }
@@ -409,7 +418,33 @@ function dkDanhSachChuan() {
         let s = dkChuan[k][mk];
         if (s && typeof s === 'object') ds.push({ k, mk, m: parseInt(String(mk).replace('M', '')) || 0, moldId: s.moldId || k, s });
     }));
-    return ds.sort((a, b) => String(a.moldId).localeCompare(String(b.moldId)) || a.m - b.m);
+    return ds.sort((a, b) => dkViTriMay(a.m) - dkViTriMay(b.m) || String(a.moldId).localeCompare(String(b.moldId), undefined, { numeric: true }));
+}
+// Dòng tiêu đề ngăn cách từng xưởng trong bảng
+function dkDongXuong(nhom, soCot, soBan) {
+    return `<tr class="dk-dong-xuong" data-xuong="${nhom.ma}"><td colspan="${soCot}" class="text-start fw-bold text-white py-1 px-2"
+        style="background:linear-gradient(90deg,#0369a1,#0284c7) !important; font-size:12px; letter-spacing:.5px;">🏭 ${nhom.xuong}${soBan !== undefined ? ` · ${soBan} bản chuẩn` : ''}</td></tr>`;
+}
+// Danh sách mã khuôn để chọn: danh mục khuôn PM ép nhựa + các khuôn đã có bản chuẩn
+function dkDsMaKhuon() {
+    let set = {};
+    let them = v => { v = String(v || '').trim(); if (v && !set[v.toLowerCase()]) set[v.toLowerCase()] = v; };
+    try {
+        if (typeof moldCatalog !== 'undefined' && moldCatalog)
+            (Array.isArray(moldCatalog) ? moldCatalog : Object.values(moldCatalog)).forEach(k => { if (k) them(k.id || k.moldId); });
+    } catch (e) {}
+    document.querySelectorAll('#moldOptionsList option').forEach(o => them(o.value));
+    Object.keys(dkChuan || {}).forEach(k => Object.keys(dkChuan[k] || {}).forEach(mk => { let x = dkChuan[k][mk]; if (x && typeof x === 'object') them(x.moldId); }));
+    return Object.values(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+}
+// Ô mã khuôn: chọn từ danh sách hoặc "Nhập bằng tay"
+function dkChonMaKhuon(v) {
+    let inp = document.getElementById('dkCMold');
+    if (!inp) return;
+    let tay = v === '__tay';
+    inp.classList.toggle('d-none', !tay);
+    if (tay) { inp.value = ''; inp.focus(); } else inp.value = v;
+    if (typeof dkDongBoMes === 'function') dkDongBoMes();
 }
 
 function dkMoThuVien() {
@@ -417,13 +452,20 @@ function dkMoThuVien() {
     let el = dkTaoModal('dkThuVienModal', '📚 BẢN ĐIỀU KIỆN ÉP CHUẨN (THEO KHUÔN + MÁY)', '',
         `<button type="button" class="btn btn-sm btn-3d-emerald px-3" onclick="dkModalThuVien.hide(); dkMoChuan('', 0)">➕ Lập bản chuẩn mới</button>`, true);
     let ds = dkDanhSachChuan();
+    let dem = { X1: 0, X2: 0 };
+    ds.forEach(x => { dem[dkNhomTheoMay(x.m).ma]++; });
     document.getElementById('dkThuVienModalBody').innerHTML = `
-        <input type="text" class="form-control form-control-sm mb-2" placeholder="🔎 Tìm mã khuôn / sản phẩm..." oninput="dkLocThuVien(this.value)">
+        <div class="d-flex gap-2 mb-2">
+            <select id="dkThuVienXuong" class="form-select form-select-sm fw-bold" style="width:170px; flex:none;" onchange="dkLocThuVien()">
+                <option value="ALL">🌐 Toàn xưởng</option><option value="X1">🏭 Xưởng 1 (M1-11)</option><option value="X2">🏭 Xưởng 2 (M1-10)</option>
+            </select>
+            <input type="text" id="dkThuVienTim" class="form-control form-control-sm" placeholder="🔎 Tìm mã khuôn / sản phẩm..." oninput="dkLocThuVien()">
+        </div>
         <div class="table-responsive"><table class="table table-bordered table-sm align-middle text-center mb-0">
             <thead><tr><th>Mã khuôn</th><th>Máy</th><th title="Bản gốc của khuôn: dùng để kiểm khi khuôn chạy trên máy chưa có bản riêng">Gốc</th><th>Sản phẩm</th><th>Nhựa</th><th>Cập nhật</th><th></th></tr></thead>
-            <tbody id="dkThuVienTbody">${ds.map((x, i) => `
-                <tr data-tim="${escapeHtml((x.moldId + ' ' + ((x.s.info || {}).tenSP || '') + ' ' + ((x.s.info || {}).maSP || '')).toLowerCase())}">
-                    <td class="fw-bold text-warning">${escapeHtml(x.moldId)}</td><td class="fw-bold">M${x.m}${x.s.tuGoc ? `<br><small class="fw-normal opacity-75">từ ${escapeHtml(x.s.tuGoc)}</small>` : ''}</td>
+            <tbody id="dkThuVienTbody">${ds.map((x, i) => `${(i === 0 || dkNhomTheoMay(ds[i - 1].m).ma !== dkNhomTheoMay(x.m).ma) ? dkDongXuong(dkNhomTheoMay(x.m), 7, dem[dkNhomTheoMay(x.m).ma]) : ''}
+                <tr data-xuong="${dkNhomTheoMay(x.m).ma}" data-tim="${escapeHtml((x.moldId + ' ' + ((x.s.info || {}).tenSP || '') + ' ' + ((x.s.info || {}).maSP || '')).toLowerCase())}">
+                    <td class="fw-bold text-warning">${escapeHtml(x.moldId)}</td><td class="fw-bold">${dkTenMay(x.m)}${x.s.tuGoc ? `<br><small class="fw-normal opacity-75">từ ${escapeHtml(dkTenTuKhoa(x.s.tuGoc))}</small>` : ''}</td>
                     <td><button type="button" class="btn btn-sm py-0 px-1 ${x.s.goc ? 'btn-warning' : 'btn-outline-secondary'}" style="font-size:13px;" onclick="dkDatGoc(${i})"
                         title="${x.s.goc ? 'Đang là bản gốc của khuôn' : 'Đặt làm bản gốc của khuôn (bản đã duyệt chạy hàng OK)'}">${x.s.goc ? '⭐' : '☆'}</button></td>
                     <td class="small">${escapeHtml((x.s.info || {}).tenSP || (x.s.info || {}).maSP || '')}</td>
@@ -432,6 +474,9 @@ function dkMoThuVien() {
                     <td><button type="button" class="btn btn-sm btn-outline-info py-0 px-2" onclick="dkMoTuThuVien(${i})">✏️ Sửa</button></td>
                 </tr>`).join('') || '<tr><td colspan="7" class="fst-italic small">Chưa có bản chuẩn nào. Bấm "Lập bản chuẩn mới".</td></tr>'}
             </tbody></table></div>`;
+    let loc = document.getElementById('dkThuVienXuong');
+    if (loc) loc.value = dkThuVienLoc.xuong;
+    dkLocThuVien();
     dkModalThuVien = bootstrap.Modal.getOrCreateInstance(el);
     dkModalThuVien.show();
 }
@@ -439,8 +484,8 @@ function dkMoThuVien() {
 function dkDatGoc(i) {
     let x = dkDanhSachChuan()[i];
     if (!x || !db || !checkAuthOrAlert()) return;
-    if (x.s.goc) { if (!confirm(`Bỏ dấu bản gốc của khuôn ${x.moldId} (M${x.m})?`)) return; }
-    else if (!confirm(`Đặt bản M${x.m} làm BẢN GỐC của khuôn ${x.moldId}?\nKhi khuôn chạy trên máy chưa có bản riêng, QC sẽ kiểm theo bản này.`)) return;
+    if (x.s.goc) { if (!confirm(`Bỏ dấu bản gốc của khuôn ${x.moldId} (${dkTenMayDu(x.m)})?`)) return; }
+    else if (!confirm(`Đặt bản ${dkTenMayDu(x.m)} làm BẢN GỐC của khuôn ${x.moldId}?\nKhi khuôn chạy trên máy chưa có bản riêng, QC sẽ kiểm theo bản này.`)) return;
     let up = {};
     Object.keys(dkChuan[x.k] || {}).forEach(mk => { if (dkChuan[x.k][mk] && typeof dkChuan[x.k][mk] === 'object') up[`${mk}/goc`] = null; });
     if (!x.s.goc) up[`${x.mk}/goc`] = true;
@@ -448,9 +493,18 @@ function dkDatGoc(i) {
         .then(() => dkMoThuVien())
         .catch(err => alert('❌ Không lưu được: ' + err.message));
 }
-function dkLocThuVien(q) {
-    q = String(q || '').trim().toLowerCase();
-    document.querySelectorAll('#dkThuVienTbody tr[data-tim]').forEach(tr => { tr.style.display = (!q || tr.dataset.tim.includes(q)) ? '' : 'none'; });
+function dkLocThuVien() {
+    let xEl = document.getElementById('dkThuVienXuong'), qEl = document.getElementById('dkThuVienTim');
+    let xuong = xEl ? xEl.value : 'ALL', q = String(qEl ? qEl.value : '').trim().toLowerCase();
+    dkThuVienLoc.xuong = xuong;
+    let con = { X1: 0, X2: 0 };
+    document.querySelectorAll('#dkThuVienTbody tr[data-tim]').forEach(tr => {
+        let hien = (xuong === 'ALL' || tr.dataset.xuong === xuong) && (!q || tr.dataset.tim.includes(q));
+        tr.style.display = hien ? '' : 'none';
+        if (hien) con[tr.dataset.xuong]++;
+    });
+    // Ẩn dòng tiêu đề xưởng nếu xưởng đó không còn dòng nào đang hiện
+    document.querySelectorAll('#dkThuVienTbody tr.dk-dong-xuong').forEach(tr => { tr.style.display = con[tr.dataset.xuong] ? '' : 'none'; });
 }
 function dkMoTuThuVien(i) {
     let x = dkDanhSachChuan()[i];
@@ -471,17 +525,29 @@ function dkMoChuan(moldId, m) {
     document.getElementById('dkBtnXoaChuan').classList.toggle('d-none', !std);
     let ds = dkDanhSachChuan();
     let mayOpts = '';
-    for (let i = 1; i <= TOTAL_MACHINES; i++) mayOpts += `<option value="${i}" ${i === m ? 'selected' : ''}>M${i}</option>`;
+    ['X1', 'X2'].forEach(x => {
+        mayOpts += `<optgroup label="${DK_NHOM_ZALO[x].xuong}">` + DK_THU_TU_MAY.filter(i => i <= TOTAL_MACHINES && dkNhomTheoMay(i).ma === x)
+            .map(i => `<option value="${i}" ${i === m ? 'selected' : ''}>${dkTenMay(i)} – Xưởng ${x === 'X1' ? 1 : 2}</option>`).join('') + '</optgroup>';
+    });
+    let dsKhuon = dkDsMaKhuon();
+    let coTrongDs = !!moldId && dsKhuon.some(k => k.toLowerCase() === String(moldId).trim().toLowerCase());
+    let nhapTay = !!moldId && !coTrongDs;   // mã khuôn không có trong danh sách -> mở sẵn ô nhập tay
     let body = `${typeof dkAiThanh === 'function' ? dkAiThanh('chuan') : ''}
         <div class="row g-2 mb-2">
             <div class="col-7 col-md-4"><label class="small fw-bold">Mã khuôn</label>
-                <input type="text" class="form-control form-control-sm fw-bold" id="dkCMold" list="moldOptionsList" oninput="if (typeof dkDongBoMes === 'function') dkDongBoMes()" value="${escapeHtml(moldId || '')}"></div>
+                <select class="form-select form-select-sm fw-bold" id="dkCMoldChon" onchange="dkChonMaKhuon(this.value)">
+                    <option value="">— chọn mã khuôn —</option>
+                    <option value="__tay" ${nhapTay ? 'selected' : ''}>✍️ Nhập bằng tay...</option>
+                    ${dsKhuon.map(k => `<option value="${escapeHtml(k)}" ${coTrongDs && k.toLowerCase() === String(moldId).trim().toLowerCase() ? 'selected' : ''}>${escapeHtml(k)}</option>`).join('')}
+                </select>
+                <input type="text" class="form-control form-control-sm fw-bold mt-1 ${nhapTay ? '' : 'd-none'}" id="dkCMold" placeholder="Gõ mã khuôn..." autocomplete="off"
+                    oninput="if (typeof dkDongBoMes === 'function') dkDongBoMes()" value="${escapeHtml(moldId || '')}"></div>
             <div class="col-5 col-md-2"><label class="small fw-bold">Số máy</label>
                 <select class="form-select form-select-sm fw-bold" id="dkCMay"><option value="">—</option>${mayOpts}</select></div>
             <div class="col-12 col-md-6"><label class="small fw-bold">Sao chép từ bản chuẩn khác</label>
                 <select class="form-select form-select-sm" onchange="dkSaoChepChuan(this.value); this.value=''">
                     <option value="">— chọn để điền nhanh —</option>
-                    ${ds.map((x, i) => `<option value="${i}">${escapeHtml(x.moldId)} · M${x.m}</option>`).join('')}
+                    ${ds.map((x, i) => `<option value="${i}">${dkTenMayDu(x.m)} · ${escapeHtml(x.moldId)}</option>`).join('')}
                 </select></div>
         </div>
         <div class="row g-2 mb-2">${DK_INFO.map(f => `
@@ -532,7 +598,7 @@ function dkMoChuanTuGoc(moldId, m) {
     dkDienFormChuan(Object.assign({}, g.std, { ts, info: Object.assign({}, g.std.info, { model: '', dkVit: ck.vitMay > 0 ? String(ck.vitMay) : '' }) }));
     let tb = document.createElement('div');
     tb.className = 'alert alert-info py-1 px-2 small fw-bold mb-2';
-    tb.textContent = `📋 Đã điền sẵn từ bản gốc M${g.m}` + (!isNaN(ck.heSo) ? ` (vị trí đã quy đổi theo ĐK vít ${ck.vitGoc} → ${ck.vitMay} mm)` : '')
+    tb.textContent = `📋 Đã điền sẵn từ bản gốc ${dkTenMayDu(g.m)}` + (!isNaN(ck.heSo) ? ` (vị trí đã quy đổi theo ĐK vít ${ck.vitGoc} → ${ck.vitMay} mm)` : '')
         + '. Kỹ thuật soát lại áp suất, tốc độ, vị trí cho đúng máy này rồi bấm Lưu.';
     let body = document.getElementById('dkChuanModalBody');
     if (body) body.prepend(tb);
@@ -569,7 +635,7 @@ function dkLuuChuan() {
     let path = `${DK_PATH_CHUAN}/${getSafeFirebaseKey(moldId)}/M${m}`;
     // Sửa mã khuôn / số máy của bản cũ -> lưu sang vị trí mới, hỏi trước khi ghi đè bản đã có ở đó
     let khacViTri = dkDangSua && (dkDangSua.moldId !== moldId || dkDangSua.m !== m);
-    if (khacViTri && dkLayChuan(moldId, m) && !confirm(`Khuôn ${moldId} trên M${m} đã có bản chuẩn. Ghi đè?`)) return;
+    if (khacViTri && dkLayChuan(moldId, m) && !confirm(`Khuôn ${moldId} trên ${dkTenMayDu(m)} đã có bản chuẩn. Ghi đè?`)) return;
     db.ref(path).set(rec).then(() => {
         if (dkModalChuan) dkModalChuan.hide();
         dkRender();
@@ -578,7 +644,7 @@ function dkLuuChuan() {
 
 function dkXoaChuan() {
     if (!dkDangSua || !dkDangSua.coSan || !db) return;
-    if (!confirm(`Xóa bản điều kiện chuẩn của khuôn ${dkDangSua.moldId} trên M${dkDangSua.m}?`)) return;
+    if (!confirm(`Xóa bản điều kiện chuẩn của khuôn ${dkDangSua.moldId} trên ${dkTenMayDu(dkDangSua.m)}?`)) return;
     db.ref(`${DK_PATH_CHUAN}/${getSafeFirebaseKey(dkDangSua.moldId)}/M${dkDangSua.m}`).remove()
         .then(() => { if (dkModalChuan) dkModalChuan.hide(); })
         .catch(err => alert('❌ Không xóa được: ' + err.message));
@@ -602,7 +668,7 @@ function dkMoKiemTra(date, ca, m) {
         `<span class="me-auto fw-bold small" id="dkKiemTong"></span>
          <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3" data-bs-dismiss="modal">Đóng</button>
          <button type="button" class="btn btn-sm btn-3d-emerald px-4" onclick="dkLuuKiemTra()">💾 Lưu xác nhận</button>`, true);
-    document.getElementById('dkKiemModalTitle').textContent = `📝 ĐIỀU KIỆN ÉP – M${m} · ${mold} · ${ca} ${dkNgayNgan(date)}`;
+    document.getElementById('dkKiemModalTitle').textContent = `📝 ĐIỀU KIỆN ÉP – ${dkTenMayDu(m)} · ${mold} · ${ca} ${dkNgayNgan(date)}`;
     let vals = (chk && chk.vals) || {};
     let hangTS = (p, s) => `
         <tr data-pid="${p.id}">
@@ -623,14 +689,14 @@ function dkMoKiemTra(date, ca, m) {
         </div>
         ${ck.goc ? `
         <div class="alert alert-info py-2 px-2 small mb-2">
-            <b>📋 M${m} chưa có bản chuẩn riêng – đang kiểm theo BẢN GỐC M${ck.mGoc}</b>${ck.stdGoc.goc ? ' ⭐' : ''}
+            <b>📋 ${dkTenMayDu(m)} chưa có bản chuẩn riêng – đang kiểm theo BẢN GỐC ${dkTenMayDu(ck.mGoc)}</b>${ck.stdGoc.goc ? ' ⭐' : ''}
             (cập nhật ${escapeHtml(String(ck.stdGoc.updatedAt || '').substring(0, 10))}).<br>
             • Nhiệt độ, nhiệt khuôn, sấy, thời gian bảo áp / bắn keo / làm mát, chu kỳ, trọng lượng SP: so như bình thường.<br>
-            • Vị trí: ${!isNaN(ck.heSo) ? `đã quy đổi theo ĐK vít ${ck.vitGoc} mm (M${ck.mGoc}) → ${ck.vitMay} mm (M${m}).` : 'chỉ tham khảo – nhập ĐK vít 2 máy để quy đổi và so sánh.'}<br>
-            • Áp suất, tốc độ, lực kẹp…: chỉ tham khảo, vẫn nhập số thực tế để lập bản riêng cho M${m}.
+            • Vị trí: ${!isNaN(ck.heSo) ? `đã quy đổi theo ĐK vít ${ck.vitGoc} mm (${dkTenMayDu(ck.mGoc)}) → ${ck.vitMay} mm (${dkTenMayDu(m)}).` : 'chỉ tham khảo – nhập ĐK vít 2 máy để quy đổi và so sánh.'}<br>
+            • Áp suất, tốc độ, lực kẹp…: chỉ tham khảo, vẫn nhập số thực tế để lập bản riêng cho ${dkTenMayDu(m)}.
             <div class="d-flex align-items-center gap-2 mt-2 flex-wrap">
-                <span>ĐK vít M${ck.mGoc}: <b>${ck.vitGoc > 0 ? ck.vitGoc + ' mm' : 'chưa có'}</b></span>
-                <span>· ĐK vít M${m}:</span>
+                <span>ĐK vít ${dkTenMayDu(ck.mGoc)}: <b>${ck.vitGoc > 0 ? ck.vitGoc + ' mm' : 'chưa có'}</b></span>
+                <span>· ĐK vít ${dkTenMayDu(m)}:</span>
                 <input type="text" inputmode="decimal" id="dkKVit" class="form-control form-control-sm text-center" style="width:80px;" value="${ck.vitMay > 0 ? ck.vitMay : ''}" placeholder="mm">
                 <button type="button" class="btn btn-sm btn-outline-info py-0 px-2" onclick="dkApDungVit()">Áp dụng</button>
             </div>
@@ -663,7 +729,7 @@ function dkMoKiemTra(date, ca, m) {
     if (ck.goc) html += `
         <div class="form-check mb-2 p-2 border border-warning rounded-3">
             <input type="checkbox" class="form-check-input ms-0 me-2" id="dkKSpDau" ${chk && chk.spDauOK ? 'checked' : ''}>
-            <label class="form-check-label small fw-bold" for="dkKSpDau">✅ Sản phẩm đầu tiên trên M${m} đã kiểm OK (trọng lượng trong dung sai, ngoại quan đạt) – bắt buộc khi kiểm theo bản gốc</label>
+            <label class="form-check-label small fw-bold" for="dkKSpDau">✅ Sản phẩm đầu tiên trên ${dkTenMayDu(m)} đã kiểm OK (trọng lượng trong dung sai, ngoại quan đạt) – bắt buộc khi kiểm theo bản gốc</label>
         </div>`;
     html += `<label class="small fw-bold">Ghi chú / xử lý khi NG</label>
         <textarea class="form-control form-control-sm" id="dkKGhiChu" rows="2" placeholder="Bắt buộc khi có thông số NG: đã báo ai, xử lý thế nào...">${escapeHtml((chk && chk.note) || '')}</textarea>`;
@@ -717,7 +783,7 @@ async function dkLuuKiemTra() {
     let note = document.getElementById('dkKGhiChu').value.trim();
     if (ng.length && !note) { alert('⚠️ Có thông số NG – vui lòng ghi chú cách xử lý / đã báo kỹ thuật.'); return; }
     let spDau = document.getElementById('dkKSpDau');
-    if (ck.goc && !(spDau && spDau.checked)) { alert(`⚠️ Đang kiểm theo bản gốc M${ck.mGoc}: phải kiểm sản phẩm đầu tiên trên M${m} OK rồi tích xác nhận.`); return; }
+    if (ck.goc && !(spDau && spDau.checked)) { alert(`⚠️ Đang kiểm theo bản gốc ${dkTenMayDu(ck.mGoc)}: phải kiểm sản phẩm đầu tiên trên ${dkTenMayDu(m)} OK rồi tích xác nhận.`); return; }
     let rec = {
         moldId: mold, may: m, ca, loai: document.getElementById('dkKLoai').value, vals, ng,
         kq: ng.length ? 'NG' : 'OK', note, by: ten, email: (currentUser && currentUser.email) || '', at: new Date().toISOString()
@@ -741,12 +807,12 @@ async function dkLuuKiemTra() {
     if (ng.length) {
         let nhom = dkNhomTheoMay(m);
         let dong = ng.map(pid => { let p = dkThongSo(pid), s = dkChuanCuaTS(std, p); return `  • ${p.ten}: thực tế ${vals[pid]} ${p.dv} (chuẩn ${dkChuText(p, s)})`; });
-        dkXepTinZalo(nhom.ma, `🚨 [ĐIỀU KIỆN ÉP NG – ${nhom.xuong}]\n📅 ${dkNgayNgan(date)} · ${ca} · M${m} · Khuôn ${mold}`
-            + (ck.goc ? ` (theo bản gốc M${ck.mGoc})` : '') + `\n👤 QC: ${ten}\n${dong.join('\n')}\n📝 ${note}`)
+        dkXepTinZalo(nhom.ma, `🚨 [ĐIỀU KIỆN ÉP NG – ${nhom.xuong}]\n📅 ${dkNgayNgan(date)} · ${ca} · ${dkTenMay(m)} · Khuôn ${mold}`
+            + (ck.goc ? ` (theo bản gốc ${dkTenMayDu(ck.mGoc)})` : '') + `\n👤 QC: ${ten}\n${dong.join('\n')}\n📝 ${note}`)
             .catch(e => console.warn('Không xếp được tin Zalo:', e));
     }
     // Kiểm theo bản gốc đạt + SP đầu OK -> đề nghị lưu số thực tế thành bản chuẩn riêng cho máy này
-    if (ck.goc && !ng.length && confirm(`✅ Đã lưu xác nhận M${m} (theo bản gốc M${ck.mGoc}).\n\nLưu luôn các số thực tế vừa kiểm thành BẢN CHUẨN RIÊNG cho khuôn ${mold} trên M${m}?\n(Lần sau khuôn chạy ở M${m} sẽ so với bản này.)`))
+    if (ck.goc && !ng.length && confirm(`✅ Đã lưu xác nhận ${dkTenMayDu(m)} (theo bản gốc ${dkTenMayDu(ck.mGoc)}).\n\nLưu luôn các số thực tế vừa kiểm thành BẢN CHUẨN RIÊNG cho khuôn ${mold} trên ${dkTenMayDu(m)}?\n(Lần sau khuôn chạy ở ${dkTenMayDu(m)} sẽ so với bản này.)`))
         dkLuuThanhChuan(mold, m, ck, vals);
 }
 
@@ -768,15 +834,15 @@ function dkTaoChuanTuKiem(mold, m, ck, vals, nguoi) {
     let info = Object.assign({}, ck.stdGoc.info || {});
     delete info.model;
     if (ck.vitMay > 0) info.dkVit = String(ck.vitMay); else delete info.dkVit;
-    info.ghiChu = `Lập từ bản gốc M${ck.mGoc} + số thực tế QC kiểm (SP đầu OK)` + (info.ghiChu ? ' · ' + info.ghiChu : '');
+    info.ghiChu = `Lập từ bản gốc ${dkTenMayDu(ck.mGoc)} + số thực tế QC kiểm (SP đầu OK)` + (info.ghiChu ? ' · ' + info.ghiChu : '');
     return { moldId: mold, may: m, info, ts, tuGoc: `M${ck.mGoc}`, updatedAt: new Date().toISOString(), updatedBy: nguoi || '' };
 }
 function dkLuuThanhChuan(mold, m, ck, vals) {
     if (!db) return;
-    if (dkLayChuan(mold, m) && !confirm(`Khuôn ${mold} trên M${m} đã có bản chuẩn. Ghi đè?`)) return;
+    if (dkLayChuan(mold, m) && !confirm(`Khuôn ${mold} trên ${dkTenMayDu(m)} đã có bản chuẩn. Ghi đè?`)) return;
     let rec = dkTaoChuanTuKiem(mold, m, ck, vals, (currentUser && currentUser.email) || '');
     db.ref(`${DK_PATH_CHUAN}/${getSafeFirebaseKey(mold)}/M${m}`).set(rec)
-        .then(() => { alert(`✅ Đã lưu bản chuẩn riêng cho ${mold} trên M${m} (${Object.keys(rec.ts).length} thông số).\nKỹ thuật vào "📄 Đã có · sửa" để soát lại và bổ sung thông số đóng/mở/đẩy nếu cần.`); dkRender(); })
+        .then(() => { alert(`✅ Đã lưu bản chuẩn riêng cho ${mold} trên ${dkTenMayDu(m)} (${Object.keys(rec.ts).length} thông số).\nKỹ thuật vào "📄 Đã có · sửa" để soát lại và bổ sung thông số đóng/mở/đẩy nếu cần.`); dkRender(); })
         .catch(err => alert('❌ Không lưu được bản chuẩn: ' + err.message));
 }
 function dkApDungVit() {
@@ -857,11 +923,11 @@ async function dkNhacTick() {
                 if (!daKiem && now > cur.since + DK_HAN_PHUT * 60000) {
                     let id = `DK_${key}_${moldKey}`;
                     if (!daNhac(id)) ungVien.push({ id, nhom, loai: 'dk',
-                        dong: `  • M${m} – khuôn ${mold}` + (cur.prev ? ` (đổi khuôn lúc ${dkGio(cur.since)})` : '') + (dkLayChuan(mold, m) ? '' : (dkLayChuanGoc(mold, m) ? ` – 📋 chưa có bản riêng, kiểm theo bản gốc M${dkLayChuanGoc(mold, m).m} (kỹ thuật cần lập bản cho M${m})` : ' – ⚠️ chưa có bản điều kiện chuẩn')) });
+                        dong: `  • ${dkTenMay(m)} – khuôn ${mold}` + (cur.prev ? ` (đổi khuôn lúc ${dkGio(cur.since)})` : '') + (dkLayChuan(mold, m) ? '' : (dkLayChuanGoc(mold, m) ? ` – 📋 chưa có bản riêng, kiểm theo bản gốc ${dkTenMay(dkLayChuanGoc(mold, m).m)} (kỹ thuật cần lập bản cho ${dkTenMay(m)})` : ' – ⚠️ chưa có bản điều kiện chuẩn')) });
                 }
                 // (b) Kiểm SP định kỳ 2 giờ/lần
                 let rec2 = t2[`${key}_${slot}`];
-                if (!(rec2 && (parseInt(rec2.totalCheck) || 0) > 0) && now > slotBatDau + DK_HAN_PHUT * 60000) thieu2h[nhom].push(`M${m}`);
+                if (!(rec2 && (parseInt(rec2.totalCheck) || 0) > 0) && now > slotBatDau + DK_HAN_PHUT * 60000) thieu2h[nhom].push(`${dkTenMay(m)}`);
             }
             ['X1', 'X2'].forEach(nhom => {
                 if (!thieu2h[nhom].length) return;

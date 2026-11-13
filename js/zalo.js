@@ -107,7 +107,7 @@
                     totalChecked += t; totalDefects += d;
                     let isNG = (rec.overall === 'NG' || rec.colorCheck === 'NG' || rec.visual === 'NG' || rec.dimension === 'NG' || rec.mechanical === 'NG');
                     if (isNG) {
-                        ngItems.push(`  • M${m} (Khuôn ${rec.moldId}): Lỗi ${d}/${t} SP. ĐG: ${rec.overall}. Ghi chú: ${rec.note || 'Không'}`);
+                        ngItems.push(`  • ${qcTenMayDu(m)} (Khuôn ${rec.moldId}): Lỗi ${d}/${t} SP. ĐG: ${rec.overall}. Ghi chú: ${rec.note || 'Không'}`);
                     }
                 }
             }
