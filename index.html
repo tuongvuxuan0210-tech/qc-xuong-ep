@@ -135,9 +135,9 @@
                             class="qc-sticky-toolbar d-flex flex-wrap justify-content-between align-items-center gap-2">
                             <div>
                                 <h5 class="fw-bold text-info m-0" id="tab1Title">Thông Số Vận Hành Máy Ép Haitian & Tình
-                                    Trạng Khuôn (Toàn Xưởng M1 - M21)</h5>
+                                    Trạng Khuôn (Toàn Xưởng)</h5>
                                 <small class="text-light opacity-75" style="font-size: 11px;">Mã khuôn tự đồng bộ từ
-                                    MES. Tên QC điền 1 máy tự đồng bộ cho các máy cùng phân xưởng trong ca (Xưởng 1: M11-M21, Xưởng 2: M1-M10).</small>
+                                    MES. Tên QC điền 1 máy tự đồng bộ cho các máy cùng phân xưởng trong ca (Xưởng 1: M1-M11, Xưởng 2: M1-M10).</small>
                             </div>
                             <div class="d-flex align-items-center gap-2 flex-wrap">
                                 <!-- BỘ LỌC PHÂN XƯỞNG TAB 1 -->
@@ -145,7 +145,7 @@
                                     <button type="button" class="btn btn-sm btn-3d-primary rounded-pill px-3"
                                         id="btnT1FilterAll" onclick="setTab1WorkshopFilter('ALL')">🌐 Toàn Xưởng</button>
                                     <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-3"
-                                        id="btnT1FilterX2" onclick="setTab1WorkshopFilter('XUONG2')">🏭 Xưởng 1 (M11-21)</button>
+                                        id="btnT1FilterX2" onclick="setTab1WorkshopFilter('XUONG2')">🏭 Xưởng 1 (M1-11)</button>
                                     <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-3"
                                         id="btnT1FilterX1" onclick="setTab1WorkshopFilter('XUONG1')">🏭 Xưởng 2 (M1-10)</button>
                                 </div>
@@ -202,7 +202,7 @@
                             class="qc-sticky-toolbar d-flex flex-wrap justify-content-between align-items-center gap-2">
                             <div>
                                 <h5 class="fw-bold text-info m-0" id="tab2Title">Kiểm Tra Sản Phẩm Định Kỳ (2 Giờ / Lần)
-                                    - Toàn Xưởng (M1 - M21)</h5>
+                                    - Toàn Xưởng</h5>
                                 <small class="text-light opacity-75" style="font-size: 11px;">Mẫu kiểm tra tiêu chuẩn.
                                     Tỷ lệ lỗi mẫu > 20% tự động đánh giá NG. Tên QC tự đồng bộ theo phân xưởng trong ca.</small>
                             </div>
@@ -212,7 +212,7 @@
                                     <button type="button" class="btn btn-sm btn-3d-primary rounded-pill px-3"
                                         id="btnT2FilterAll" onclick="setTab2WorkshopFilter('ALL')">🌐 Toàn Xưởng</button>
                                     <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-3"
-                                        id="btnT2FilterX2" onclick="setTab2WorkshopFilter('XUONG2')">🏭 Xưởng 1 (M11-21)</button>
+                                        id="btnT2FilterX2" onclick="setTab2WorkshopFilter('XUONG2')">🏭 Xưởng 1 (M1-11)</button>
                                     <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-3"
                                         id="btnT2FilterX1" onclick="setTab2WorkshopFilter('XUONG1')">🏭 Xưởng 2 (M1-10)</button>
                                 </div>
@@ -398,7 +398,7 @@
                                     <button type="button" class="btn btn-sm btn-3d-primary rounded-pill px-2 py-1"
                                         id="btnT3WsAll" onclick="setTab3WorkshopFilter('ALL')">🌐 Toàn Xưởng</button>
                                     <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-2 py-1"
-                                        id="btnT3WsX2" onclick="setTab3WorkshopFilter('XUONG2')">🏭 X1 (M11-21)</button>
+                                        id="btnT3WsX2" onclick="setTab3WorkshopFilter('XUONG2')">🏭 X1 (M1-11)</button>
                                     <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-2 py-1"
                                         id="btnT3WsX1" onclick="setTab3WorkshopFilter('XUONG1')">🏭 X2 (M1-10)</button>
                                 </div>
@@ -548,7 +548,7 @@
                                 <div class="col-12">
                                     <div class="chart-box-sub">
                                         <div class="d-flex flex-wrap justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary border-opacity-25 gap-2">
-                                            <div class="fw-bold text-info small">🏭 SỐ LƯỢNG SẢN PHẨM LỖI THEO TỪNG MÁY ÉP (M1 - M21)</div>
+                                            <div class="fw-bold text-info small">🏭 SỐ LƯỢNG SẢN PHẨM LỖI THEO TỪNG MÁY ÉP (XƯỞNG 1: M1-M11 · XƯỞNG 2: M1-M10)</div>
                                             <div class="d-flex align-items-center gap-3 small" style="font-size: 11px;">
                                                 <span class="d-inline-flex align-items-center gap-1">
                                                     <span style="display:inline-block; width:12px; height:12px; background:linear-gradient(180deg, #38bdf8, #0284c7); border-radius:3px;"></span>
@@ -556,7 +556,7 @@
                                                 </span>
                                                 <span class="d-inline-flex align-items-center gap-1">
                                                     <span style="display:inline-block; width:12px; height:12px; background:linear-gradient(180deg, #a855f7, #7c3aed); border-radius:3px;"></span>
-                                                    <span>Xưởng 1 (M11 - M21)</span>
+                                                    <span>Xưởng 1 (M1 - M11)</span>
                                                 </span>
                                                 <span class="d-inline-flex align-items-center gap-1">
                                                     <span style="display:inline-block; width:12px; height:12px; background:linear-gradient(180deg, #f43f5e, #be123c); border-radius:3px;"></span>
@@ -993,26 +993,26 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <!-- Hệ Thống QC - Các Modules JavaScript Chuẩn Dev Chuyên Nghiệp -->
-    <script src="js/config.js"></script>
-    <script src="js/state.js"></script>
-    <script src="js/theme.js"></script>
-    <script src="js/utils.js?v=chong_ghi_de_20261107"></script>
-    <script src="js/auth.js?v=fai_20261112"></script>
-    <script src="js/firebase-service.js?v=fai_20261112"></script>
-    <script src="js/mes-sync.js?v=fai_20261112"></script>
-    <script src="js/zalo.js?v=20261111"></script>
-    <script src="js/image-service.js"></script>
-    <script src="js/tab1.js?v=chong_ghi_de_20261107"></script>
-    <script src="js/tab2.js?v=fai_20261112"></script>
-    <script src="js/doi-sach-4m.js?v=fai_20261112"></script>
-    <script src="js/tab3.js"></script>
-    <script src="js/tab-in.js"></script>
-    <script src="js/tra-ve.js"></script>
-    <script src="js/dieu-kien-ep.js?v=20261112f"></script>
-    <script src="js/dk-mo-rong.js?v=20261112d"></script>
-    <script src="js/kiem-dau-lo.js?v=20261112b"></script>
-    <script src="js/export-service.js"></script>
-    <script src="js/app.js"></script>
+    <script src="js/config.js?v=20261113c"></script>
+    <script src="js/state.js?v=20261113c"></script>
+    <script src="js/theme.js?v=20261113c"></script>
+    <script src="js/utils.js?v=20261113c"></script>
+    <script src="js/auth.js?v=20261113c"></script>
+    <script src="js/firebase-service.js?v=20261113c"></script>
+    <script src="js/mes-sync.js?v=20261113c"></script>
+    <script src="js/zalo.js?v=20261113c"></script>
+    <script src="js/image-service.js?v=20261113c"></script>
+    <script src="js/tab1.js?v=20261113c"></script>
+    <script src="js/tab2.js?v=20261113c"></script>
+    <script src="js/doi-sach-4m.js?v=20261113c"></script>
+    <script src="js/tab3.js?v=20261113c"></script>
+    <script src="js/tab-in.js?v=20261113c"></script>
+    <script src="js/tra-ve.js?v=20261113c"></script>
+    <script src="js/dieu-kien-ep.js?v=20261113c"></script>
+    <script src="js/dk-mo-rong.js?v=20261113c"></script>
+    <script src="js/kiem-dau-lo.js?v=20261113c"></script>
+    <script src="js/export-service.js?v=20261113c"></script>
+    <script src="js/app.js?v=20261113c"></script>
 </body>
 
 </html>
