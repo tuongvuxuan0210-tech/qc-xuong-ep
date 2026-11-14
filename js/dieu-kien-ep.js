@@ -21,6 +21,8 @@
 const DK_PATH_CHUAN = 'qc_dk_ep_chuan_v1';
 const DK_PATH_CHECK = 'qc_dk_ep_check_v1';
 const DK_PATH_NHAC = 'qc_nhac_v1';
+const DK_PATH_KHUON_TAY = 'qc_khuon_tay_v1';   // mã khuôn QC nhập tay khi PM ép nhựa chưa có kế hoạch: <date>/M<m>_<Ngay|Dem> = { mold, by, at }
+let dkKhuonTay = {};
 const DK_HAN_PHUT = 30;          // hạn hoàn thành tính từ đầu ca / lúc đổi khuôn / đầu khung giờ / lúc chụp ảnh lỗi
 const DK_TICK_MS = 120000;       // chu kỳ kiểm tra của bộ nhắc
 const DK_TIN_QUA_HAN_PHUT = 180;  // tin chờ quá lâu (máy gửi Zalo tắt) thì bỏ, không gửi muộn
@@ -131,7 +133,75 @@ function dkKhuonDangChay(date, m, ca) {
         let recs = qcProdRecs(date, parseInt(m)).filter(r => qcShiftMatch(r, ca) && r.moldId);
         if (recs.length) return String(recs[recs.length - 1].moldId).trim();
     }
-    return String(qcResolveMold(date, m, ca, '').mold || '').trim();
+    let pm = String(qcResolveMold(date, m, ca, '').mold || '').trim();
+    if (pm) return pm;
+    let tay = dkKhuonTayCua(date, m, ca);
+    return tay ? tay.mold : '';
+}
+// ---- Mã khuôn nhập tay (dùng khi PM ép nhựa chưa có dữ liệu của máy) ----
+function dkKhoaCaTay(m, ca) { return `M${parseInt(m)}_${String(ca).includes('Đêm') ? 'Dem' : 'Ngay'}`; }
+function dkKhuonTayCua(date, m, ca) {
+    let r = (dkKhuonTay[date] || {})[dkKhoaCaTay(m, ca)];
+    return r && r.mold ? r : null;
+}
+// Có dữ liệu từ PM ép nhựa không (không tính nhập tay)
+function dkCoKhuonPM(date, m, ca) {
+    if (typeof mesSyncActive !== 'undefined' && mesSyncActive && qcProdRecs(date, parseInt(m)).some(r => qcShiftMatch(r, ca) && r.moldId)) return true;
+    return !!String(qcResolveMold(date, m, ca, '').mold || '').trim();
+}
+// Mã khuôn nhập tay gần nhất của máy (để gợi ý ca sau)
+function dkKhuonTayGanNhat(m) {
+    let ks = Object.keys(dkKhuonTay).sort().reverse(), dem = 'M' + parseInt(m) + '_Dem', ngay = 'M' + parseInt(m) + '_Ngay';
+    for (let d of ks) { let o = dkKhuonTay[d] || {}; let r = o[dem] || o[ngay]; if (r && r.mold) return r.mold; }
+    return '';
+}
+function dkNgheKhuonTay() {
+    let tu = new Date(); tu.setDate(tu.getDate() - 7);
+    db.ref(DK_PATH_KHUON_TAY).orderByKey().startAt(dkISO(tu)).on('value', s => {
+        dkKhuonTay = s.val() || {};
+        dkRender();
+        if (typeof faiRender === 'function') faiRender();
+        if (typeof faiVeLaiTab2 === 'function') faiVeLaiTab2();
+    }, err => console.warn('Không đọc được mã khuôn nhập tay', err));
+}
+function dkMoNhapTay(m) {
+    if (!checkAuthOrAlert() || !db) return;
+    if (typeof pqKiemMay === 'function') { let loi = pqKiemMay(m); if (loi) { alert(loi); return; } }
+    let date = dkXem.date, ca = dkXem.ca;
+    let cu = dkKhuonTayCua(date, m, ca);
+    let goiY = cu ? cu.mold : dkKhuonTayGanNhat(m);
+    let el = dkTaoModal('dkTayModal', '✍️ NHẬP TAY MÃ KHUÔN ĐANG CHẠY', '',
+        `<button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3 me-auto" id="dkTayXoa" onclick="dkXoaNhapTay()">🗑️ Máy dừng / xóa</button>
+         <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3" data-bs-dismiss="modal">Đóng</button>
+         <button type="button" class="btn btn-sm btn-3d-emerald px-4" onclick="dkLuuNhapTay()">💾 Lưu</button>`);
+    dkTayDangSua = { date, ca, m };
+    document.getElementById('dkTayModalBody').innerHTML = `
+        <div class="small opacity-75 mb-2">Dùng khi PM ép nhựa chưa có kế hoạch của máy này. Mã khuôn nhập tay chỉ áp dụng cho <b>${dkTenMayDu(m)} · ${ca} ${dkNgayNgan(date)}</b>;
+            khi PM ép nhựa có dữ liệu thì phần mềm tự dùng dữ liệu PM.</div>
+        <label class="small fw-bold">Mã khuôn</label>
+        <input type="text" class="form-control fw-bold" id="dkTayKhuon" list="moldOptionsList" value="${escapeHtml(goiY || '')}" placeholder="VD: JAZ-PKW4526-T04-01" autocomplete="off">
+        ${!cu && goiY ? '<div class="small text-info mt-1">Gợi ý theo lần nhập tay gần nhất của máy – kiểm tra lại trước khi lưu.</div>' : ''}`;
+    document.getElementById('dkTayXoa').classList.toggle('d-none', !cu);
+    bootstrap.Modal.getOrCreateInstance(el).show();
+    setTimeout(() => { let i = document.getElementById('dkTayKhuon'); if (i) i.focus(); }, 300);
+}
+let dkTayDangSua = null;
+function dkLuuNhapTay() {
+    let x = dkTayDangSua; if (!x) return;
+    let mold = (document.getElementById('dkTayKhuon').value || '').trim();
+    if (!mold) { alert('⚠️ Nhập mã khuôn.'); return; }
+    let by = '';
+    try { by = typeof pqTenNgan === 'function' ? pqTenNgan(firebase.auth().currentUser.email) : firebase.auth().currentUser.email; } catch (e) {}
+    db.ref(`${DK_PATH_KHUON_TAY}/${x.date}/${dkKhoaCaTay(x.m, x.ca)}`).set({ mold, by, at: Date.now() })
+        .then(() => bootstrap.Modal.getOrCreateInstance(document.getElementById('dkTayModal')).hide())
+        .catch(e => alert('❌ Không lưu được: ' + e.message));
+}
+function dkXoaNhapTay() {
+    let x = dkTayDangSua; if (!x) return;
+    if (!confirm(`Xóa mã khuôn nhập tay của ${dkTenMayDu(x.m)} (${x.ca})? Máy sẽ hiện "Máy không chạy".`)) return;
+    db.ref(`${DK_PATH_KHUON_TAY}/${x.date}/${dkKhoaCaTay(x.m, x.ca)}`).remove()
+        .then(() => bootstrap.Modal.getOrCreateInstance(document.getElementById('dkTayModal')).hide())
+        .catch(e => alert('❌ ' + e.message));
 }
 
 function dkLayChuan(moldId, m) {
@@ -233,6 +303,7 @@ function dkKhoiDong() {
         dkBound = true;
         db.ref(DK_PATH_CHUAN).on('value', s => { dkChuan = s.val() || {}; dkRender(); },
             err => { dkNhacLoi = 'Chưa có quyền đọc nhánh ' + DK_PATH_CHUAN + ' (Firebase Rules)'; console.warn(err); dkRender(); });
+        dkNgheKhuonTay();
     }
     dkNgheCheck();
     if (!dkNhacTimer) {
@@ -243,11 +314,11 @@ function dkKhoiDong() {
 }
 function dkStop() {
     if (db) {
-        try { db.ref(DK_PATH_CHUAN).off(); } catch (e) {}
+        try { db.ref(DK_PATH_CHUAN).off(); db.ref(DK_PATH_KHUON_TAY).off(); } catch (e) {}
         if (dkCheckListener) { try { db.ref(`${DK_PATH_CHECK}/${dkCheckListener}`).off(); } catch (e) {} }
     }
     if (dkNhacTimer) { clearInterval(dkNhacTimer); dkNhacTimer = null; }
-    dkBound = false; dkCheckListener = null; dkChuan = {}; dkChecks = {}; dkNhacNgay = {};
+    dkBound = false; dkCheckListener = null; dkChuan = {}; dkChecks = {}; dkNhacNgay = {}; dkKhuonTay = {};
 }
 function dkNgheCheck() {
     if (!db || !isEditMode) return;
@@ -340,7 +411,9 @@ function dkRender() {
         if (dkXem.xuong === 'ALL' && (m === 1 || m === 11)) html += dkDongXuong(dkNhomTheoMay(m), 6);
         let mold = dkKhuonDangChay(date, m, ca);
         if (!mold) {
-            html += `<tr class="opacity-50"><td class="fw-bold sticky-col">${dkTenMay(m)}</td><td colspan="5" class="small fst-italic">Máy không chạy</td></tr>`;
+            html += `<tr><td class="fw-bold sticky-col opacity-50">${dkTenMay(m)}</td><td colspan="5" class="small">
+                <span class="fst-italic opacity-50 me-2">Máy không chạy</span>
+                <button type="button" class="btn btn-sm btn-outline-warning py-0 px-2" data-act="tay" data-m="${m}" style="font-size:11px;" title="PM ép nhựa chưa có kế hoạch – nhập mã khuôn đang chạy">✍️ Nhập tay mã khuôn</button></td></tr>`;
             continue;
         }
         let std = dkLayChuan(mold, m), chk = dkLayCheck(date, m, ca, mold);
@@ -374,7 +447,7 @@ function dkRender() {
             : `<small class="text-warning fw-bold">Chưa có bản chuẩn</small>`;
         html += `<tr>
             <td class="fw-bold sticky-col">${dkTenMay(m)}</td>
-            <td class="fw-bold text-warning">${escapeHtml(mold)}${doiKhuon ? `<br><small class="text-info">🔁 đổi khuôn ${dkGio(cur.since)}</small>` : ''}</td>
+            <td class="fw-bold text-warning">${escapeHtml(mold)}${!dkCoKhuonPM(date, m, ca) ? `<br><button type="button" class="btn btn-sm btn-link p-0 text-info" data-act="tay" data-m="${m}" style="font-size:11px;" title="Sửa / xóa mã khuôn nhập tay">✍️ nhập tay${(dkKhuonTayCua(date, m, ca) || {}).by ? ' · ' + escapeHtml(dkKhuonTayCua(date, m, ca).by) : ''} · sửa</button>` : ''}${doiKhuon ? `<br><small class="text-info">🔁 đổi khuôn ${dkGio(cur.since)}</small>` : ''}</td>
             <td>${chuanHtml}</td><td>${tt}</td><td class="small">${nguoi}</td><td>${thaoTac}</td></tr>`;
     }
     tbody.innerHTML = html;
@@ -387,6 +460,7 @@ function dkClick(e) {
     if (b.dataset.act === 'chuan') dkMoChuan(b.dataset.mold, m);
     else if (b.dataset.act === 'kiem') dkMoKiemTra(dkXem.date, dkXem.ca, m);
     else if (b.dataset.act === 'chepgoc') dkMoChuanTuGoc(b.dataset.mold, m);
+    else if (b.dataset.act === 'tay') dkMoNhapTay(m);
 }
 
 // ===================== 5. LẬP / SỬA BẢN ĐIỀU KIỆN CHUẨN =====================
