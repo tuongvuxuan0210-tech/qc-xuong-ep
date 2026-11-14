@@ -14,6 +14,9 @@
  */
 
 const PQ_PATH = 'qc_phan_quyen_v1';
+const QC_EMAIL_DOMAIN = 'haitan.com';
+// Gõ 'QCX1' khi đăng nhập -> 'qcx1@haitan.com'; gõ đủ email thì giữ nguyên
+function qcEmailTuTen(t) { t = String(t || '').trim(); return t.includes('@') ? t : (t ? t.toLowerCase() + '@' + QC_EMAIL_DOMAIN : ''); }
 const PQ_TEN_XUONG = { ALL: 'Cả 2 xưởng', X1: 'Xưởng 1 (M1–M11)', X2: 'Xưởng 2 (M1–M10)' };
 
 let pqData = { admins: {}, users: {} };
@@ -39,7 +42,7 @@ function pqKiemMay(m) {
     if (x === 'ALL' || !m) return '';
     let xm = pqXuongCuaMay(m);
     if (xm === x) return '';
-    return `🔒 Tài khoản ${pqEmailHienTai()} được phân quyền ${PQ_TEN_XUONG[x]}.\n` +
+    return `🔒 Tài khoản ${pqTenNgan(pqEmailHienTai())} được phân quyền ${PQ_TEN_XUONG[x]}.\n` +
         `Máy ${qcTenMay(m)} thuộc ${PQ_TEN_XUONG[xm]} – không thao tác được.\nNếu cần đổi xưởng, liên hệ Admin.`;
 }
 
@@ -83,11 +86,13 @@ function pqMoBang() {
         return;
     }
     if (!pqLaAdmin()) { alert('🔒 Chỉ Admin mới mở được bảng phân quyền.'); return; }
-    let el = dkTaoModal('pqModal', '👑 PHÂN QUYỀN TÀI KHOẢN THEO XƯỞNG', '',
+    let el = dkTaoModal('pqModal', '👑 TÀI KHOẢN QC & XƯỞNG', '',
         `<button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3" data-bs-dismiss="modal">Đóng</button>`, true);
     pqVeBang();
     bootstrap.Modal.getOrCreateInstance(el).show();
 }
+// Tên đăng nhập ngắn: 'QCX1' <-> 'qcx1@haitan.com'
+function pqTenNgan(email) { let e = String(email || ''); return e.toLowerCase().endsWith('@' + QC_EMAIL_DOMAIN) ? e.slice(0, -QC_EMAIL_DOMAIN.length - 1).toUpperCase() : e; }
 function pqVeBang() {
     let body = document.getElementById('pqModalBody');
     if (!body) return;
@@ -98,51 +103,62 @@ function pqVeBang() {
     let dong = ds.map(u => {
         let ad = !!pqData.admins[u.k];
         let opt = ['ALL', 'X1', 'X2'].map(x => `<option value="${x}" ${(u.xuong || 'ALL') === x ? 'selected' : ''}>${PQ_TEN_XUONG[x]}</option>`).join('');
-        let lc = u.lanCuoi ? new Date(u.lanCuoi).toLocaleString('vi-VN', { hour12: false }) : '—';
         return `<tr>
-            <td class="text-start fw-bold">${escapeHtml(u.email || u.k)}${u.k === toi ? ' <span class="badge bg-info text-dark">bạn</span>' : ''}</td>
-            <td><select class="form-select form-select-sm fw-bold" ${ad ? 'disabled title="Admin không giới hạn xưởng"' : ''}
-                onchange="pqDoiXuong('${u.k}', this.value)">${opt}</select></td>
-            <td><div class="form-check form-switch d-inline-block m-0"><input class="form-check-input" type="checkbox" ${ad ? 'checked' : ''}
-                ${u.k === toi ? 'disabled title="Không tự gỡ quyền Admin của chính mình"' : ''} onchange="pqDoiAdmin('${u.k}', this.checked, this)"></div></td>
-            <td class="small opacity-75">${lc}</td>
-            <td>${u.k === toi ? '' : `<button type="button" class="btn btn-sm btn-outline-danger py-0 px-2" onclick="pqXoa('${u.k}')">🗑️</button>`}</td>
+            <td class="text-start fw-bold">${escapeHtml(pqTenNgan(u.email || u.k))}${u.k === toi ? ' <span class="badge bg-info text-dark">bạn</span>' : ''}</td>
+            <td>${ad ? '<span class="badge bg-warning text-dark px-3 py-2">👑 Admin</span>'
+                : `<select class="form-select form-select-sm fw-bold" onchange="pqDoiXuong('${u.k}', this.value)">${opt}</select>`}</td>
+            <td>${u.k === toi || ad ? '' : `<button type="button" class="btn btn-sm btn-outline-danger py-0 px-2" title="Xóa khỏi danh sách" onclick="pqXoa('${u.k}')">🗑️</button>`}</td>
         </tr>`;
     }).join('');
     body.innerHTML = `
-        <div class="small opacity-75 mb-2">Tài khoản được gán <b>Xưởng 1</b> hoặc <b>Xưởng 2</b> chỉ tạo / kiểm phiếu của máy thuộc xưởng đó.
-            "Cả 2 xưởng" thì phải tự chọn xưởng khi tạo phiếu. Tài khoản tự hiện ở đây sau lần đăng nhập đầu tiên, hoặc thêm bằng email bên dưới.</div>
-        <div class="table-responsive"><table class="table table-bordered table-sm align-middle text-center mb-2">
-            <thead><tr><th>Tài khoản</th><th style="width:170px;">Xưởng</th><th>Admin</th><th>Lần đăng nhập cuối</th><th></th></tr></thead>
-            <tbody>${dong || '<tr><td colspan="5" class="opacity-75">Chưa có tài khoản</td></tr>'}</tbody>
-        </table></div>
-        <div class="d-flex flex-wrap gap-2">
-            <input type="email" class="form-control form-control-sm" style="max-width:260px;" id="pqEmailMoi" placeholder="Email tài khoản QC">
-            <select class="form-select form-select-sm fw-bold" style="width:170px;" id="pqXuongMoi">
-                <option value="X1">${PQ_TEN_XUONG.X1}</option><option value="X2">${PQ_TEN_XUONG.X2}</option><option value="ALL">${PQ_TEN_XUONG.ALL}</option></select>
-            <button type="button" class="btn btn-sm btn-3d-emerald px-3" onclick="pqThem()">➕ Thêm</button>
-        </div>`;
+        <div class="fw-bold mb-1">➕ Tạo tài khoản QC</div>
+        <div class="row g-2 mb-3">
+            <div class="col-6 col-md-3"><input type="text" class="form-control form-control-sm fw-bold text-uppercase" id="pqTenMoi" placeholder="Tên đăng nhập (VD: QCX1)" autocomplete="off"></div>
+            <div class="col-6 col-md-3"><input type="text" class="form-control form-control-sm" id="pqMatKhauMoi" placeholder="Mật khẩu (ít nhất 6 ký tự)" autocomplete="off"></div>
+            <div class="col-6 col-md-3"><select class="form-select form-select-sm fw-bold" id="pqXuongMoi">
+                <option value="X1">${PQ_TEN_XUONG.X1}</option><option value="X2">${PQ_TEN_XUONG.X2}</option><option value="ALL">${PQ_TEN_XUONG.ALL}</option></select></div>
+            <div class="col-6 col-md-3"><button type="button" class="btn btn-sm btn-3d-emerald w-100" id="pqBtnTao" onclick="pqTaoTaiKhoan()">Tạo tài khoản</button></div>
+        </div>
+        <div class="table-responsive"><table class="table table-bordered table-sm align-middle text-center mb-0">
+            <thead><tr><th>Tài khoản</th><th style="width:190px;">Xưởng</th><th style="width:60px;"></th></tr></thead>
+            <tbody>${dong || '<tr><td colspan="3" class="opacity-75">Chưa có tài khoản</td></tr>'}</tbody>
+        </table></div>`;
+}
+// Tạo tài khoản đăng nhập Firebase bằng một phiên phụ, để Admin không bị đăng xuất
+async function pqTaoTaiKhoan() {
+    if (!pqLaAdmin()) return;
+    let ten = (document.getElementById('pqTenMoi').value || '').trim();
+    let mk = document.getElementById('pqMatKhauMoi').value || '';
+    let x = document.getElementById('pqXuongMoi').value;
+    if (!/^[A-Za-z0-9._-]{2,30}$/.test(ten)) { alert('⚠️ Tên đăng nhập chỉ gồm chữ không dấu, số, dấu . _ - (VD: QCX1).'); return; }
+    if (mk.length < 6) { alert('⚠️ Mật khẩu phải có ít nhất 6 ký tự.'); return; }
+    let email = qcEmailTuTen(ten);
+    let btn = document.getElementById('pqBtnTao');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang tạo...'; }
+    let phu = null;
+    try {
+        phu = firebase.apps.find(a => a.name === 'pqPhu') || firebase.initializeApp(firebaseConfig, 'pqPhu');
+        await phu.auth().createUserWithEmailAndPassword(email, mk);
+        try { await phu.auth().signOut(); } catch (e) {}
+        await db.ref(`${PQ_PATH}/users/${pqKhoaEmail(email)}`).set({ email, xuong: x, taoLuc: Date.now() });
+        alert(`✅ Đã tạo tài khoản ${ten.toUpperCase()} – ${PQ_TEN_XUONG[x]}.\nĐăng nhập: gõ "${ten.toUpperCase()}" và mật khẩu vừa đặt.`);
+    } catch (e) {
+        let m = e && e.code === 'auth/email-already-in-use' ? `Tên ${ten.toUpperCase()} đã có rồi – chọn tên khác.`
+            : e && e.code === 'auth/weak-password' ? 'Mật khẩu quá yếu (ít nhất 6 ký tự).'
+            : e && e.code === 'auth/operation-not-allowed' ? 'Firebase chưa bật đăng nhập Email/Mật khẩu.'
+            : (e && e.message) || e;
+        alert('❌ Không tạo được: ' + m);
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Tạo tài khoản'; }
+    }
 }
 function pqDoiXuong(k, x) {
     if (!pqLaAdmin()) return;
     db.ref(`${PQ_PATH}/users/${k}/xuong`).set(x).catch(e => alert('❌ ' + e.message));
 }
-function pqDoiAdmin(k, bat, el) {
-    if (!pqLaAdmin()) return;
-    let email = ((pqData.users || {})[k] || {}).email || (pqData.admins || {})[k] || k;
-    if (!confirm(bat ? `Cấp quyền ADMIN cho ${email}?` : `Gỡ quyền ADMIN của ${email}?`)) { if (el) el.checked = !bat; return; }
-    db.ref(`${PQ_PATH}/admins/${k}`).set(bat ? email : null).catch(e => alert('❌ ' + e.message));
-}
-function pqThem() {
-    if (!pqLaAdmin()) return;
-    let email = (document.getElementById('pqEmailMoi').value || '').trim().toLowerCase();
-    let x = document.getElementById('pqXuongMoi').value;
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { alert('⚠️ Email không hợp lệ.'); return; }
-    db.ref(`${PQ_PATH}/users/${pqKhoaEmail(email)}`).update({ email, xuong: x }).catch(e => alert('❌ ' + e.message));
-}
 function pqXoa(k) {
     if (!pqLaAdmin()) return;
     let email = ((pqData.users || {})[k] || {}).email || k;
-    if (!confirm(`Xóa ${email} khỏi danh sách phân quyền? (tài khoản sẽ về "Cả 2 xưởng" khi đăng nhập lại)`)) return;
+    if (!confirm(`Xóa ${pqTenNgan(email)} khỏi danh sách? (Tài khoản vẫn đăng nhập được, nhưng về "Cả 2 xưởng". Muốn khóa hẳn thì xóa trong Firebase Console → Authentication.)`)) return;
     db.ref(PQ_PATH).update({ [`users/${k}`]: null, [`admins/${k}`]: null }).catch(e => alert('❌ ' + e.message));
 }

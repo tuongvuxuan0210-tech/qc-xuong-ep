@@ -6,14 +6,15 @@
         async function loginFirebase() {
             const emailInput = document.getElementById('qcEmailInput');
             const pwdInput = document.getElementById('qcPasswordInput');
-            const email = emailInput ? emailInput.value.trim() : '';
+            const nhap = emailInput ? emailInput.value.trim() : '';
+            const email = typeof qcEmailTuTen === 'function' ? qcEmailTuTen(nhap) : nhap;
             const pwd = pwdInput ? pwdInput.value : '';
             const errEl = document.getElementById('authErrorMsg');
             const btnSubmit = document.getElementById('btnLoginSubmit');
 
             if (!email || !pwd) {
                 if (errEl) {
-                    errEl.innerText = "⚠️ Vui lòng nhập đầy đủ Email và Mật khẩu!";
+                    errEl.innerText = "⚠️ Vui lòng nhập đầy đủ Tài khoản và Mật khẩu!";
                     errEl.classList.remove('d-none');
                 }
                 return;
@@ -49,7 +50,7 @@
                 }
             } catch (error) {
                 if (errEl) {
-                    errEl.innerText = "⚠️ Email hoặc Mật khẩu không đúng!";
+                    errEl.innerText = "⚠️ Tài khoản hoặc Mật khẩu không đúng!";
                     errEl.classList.remove('d-none');
                 }
             } finally {
@@ -76,7 +77,7 @@
                 try {
                     const savedEmail = localStorage.getItem('qc_saved_email');
                     const emailInput = document.getElementById('qcEmailInput');
-                    if (emailInput && savedEmail) emailInput.value = savedEmail;
+                    if (emailInput && savedEmail) emailInput.value = typeof pqTenNgan === 'function' ? pqTenNgan(savedEmail) : savedEmail;
                 } catch (e) {}
                 if (!authModalInstance) authModalInstance = new bootstrap.Modal(modalEl);
                 authModalInstance.show();
