@@ -52,6 +52,7 @@ function pqKhoiDong() {
     db.ref(PQ_PATH).on('value', s => {
         let v = s.val() || {};
         pqData = { admins: v.admins || {}, users: v.users || {} };
+        if (pqKiemConHieuLuc()) return;
         pqGhiLanCuoi();
         if (typeof faiApXuongMacDinh === 'function') faiApXuongMacDinh();
         if (typeof faiRender === 'function') faiRender();
@@ -63,6 +64,18 @@ function pqStop() {
     pqBound = false; pqDaGhiLanCuoi = false;
     pqData = { admins: {}, users: {} };
 }
+// Đã có Admin thì chỉ tài khoản có trong danh sách mới được dùng; tài khoản bị xóa khỏi danh sách -> đăng xuất ngay
+function pqKiemConHieuLuc() {
+    let email = pqEmailHienTai();
+    if (!email || !pqCoAdmin()) return false;
+    let k = pqKhoaEmail(email);
+    if ((pqData.admins || {})[k] || (pqData.users || {})[k]) return false;
+    try { localStorage.removeItem('qc_saved_auth'); } catch (e) {}
+    if (typeof mesDangXuat === 'function') { try { mesDangXuat(); } catch (e) {} }
+    try { firebase.auth().signOut(); } catch (e) {}
+    setTimeout(() => alert(`🔒 Tài khoản ${pqTenNgan(email)} đã ngưng sử dụng.\nVui lòng đăng nhập bằng tài khoản xưởng được cấp (VD: QCX1, QCX2).`), 300);
+    return true;
+}
 // Ghi lại tài khoản vừa đăng nhập để Admin thấy trong danh sách mà gán xưởng
 function pqGhiLanCuoi() {
     if (pqDaGhiLanCuoi || !db) return;
@@ -70,9 +83,8 @@ function pqGhiLanCuoi() {
     if (!email) return;
     pqDaGhiLanCuoi = true;
     let k = pqKhoaEmail(email);
-    let up = { email, lanCuoi: Date.now() };
-    if (!(pqData.users || {})[k]) up.xuong = 'ALL';
-    db.ref(`${PQ_PATH}/users/${k}`).update(up).catch(e => console.warn('Không ghi được lần đăng nhập', e));
+    if (!(pqData.users || {})[k]) return;
+    db.ref(`${PQ_PATH}/users/${k}`).update({ lanCuoi: Date.now() }).catch(e => console.warn('Không ghi được lần đăng nhập', e));
 }
 
 // ===================== BẢNG PHÂN QUYỀN (ADMIN) =====================
@@ -168,6 +180,6 @@ function pqDoiAdmin(k, bat) {
 function pqXoa(k) {
     if (!pqLaAdmin()) return;
     let email = ((pqData.users || {})[k] || {}).email || k;
-    if (!confirm(`Xóa ${pqTenNgan(email)} khỏi danh sách? (Tài khoản vẫn đăng nhập được, nhưng về "Cả 2 xưởng". Muốn khóa hẳn thì xóa trong Firebase Console → Authentication.)`)) return;
+    if (!confirm(`Xóa ${pqTenNgan(email)}?\nTài khoản này sẽ bị đăng xuất ngay trên mọi máy và không dùng được nữa.`)) return;
     db.ref(PQ_PATH).update({ [`users/${k}`]: null, [`admins/${k}`]: null }).catch(e => alert('❌ ' + e.message));
 }
