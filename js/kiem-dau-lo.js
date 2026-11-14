@@ -114,6 +114,7 @@ function faiThongTinSX(mold, m) {
 // ===================== 2. KHỞI ĐỘNG / NGHE DỮ LIỆU =====================
 function faiKhoiDong() {
     if (!isConnected || !db || !isEditMode) return;
+    if (typeof pqKhoiDong === 'function') pqKhoiDong();
     if (!faiBound) {
         faiBound = true;
         db.ref(FAI_PATH_CFG).on('value', s => { faiCfg = Object.assign({ chanTab2: true, batDau: FAI_BAT_DAU_MAC_DINH }, s.val() || {}); faiRender(); faiVeLaiTab2(); });
@@ -135,6 +136,8 @@ function faiStop() {
         Object.keys(faiNgheNgay).forEach(d => { try { db.ref(`${FAI_PATH}/${d}`).off(); } catch (e) {} });
     }
     if (faiTimer) { clearInterval(faiTimer); faiTimer = null; }
+    if (typeof pqStop === 'function') pqStop();
+    faiXuongDaAp = false;
     faiBound = false; faiNgheNgay = {}; faiStore = {}; faiMau = {};
 }
 function faiNghe(date) {
@@ -303,16 +306,18 @@ function faiRender() {
                     <button type="button" class="btn btn-sm btn-3d-primary px-3" onclick="faiMoMau()">📏 Mẫu kiểm theo khuôn</button>
                     <button type="button" class="btn btn-sm btn-outline-success px-3" onclick="faiXuatExcel()">📊 Excel</button>
                     <button type="button" class="btn btn-sm px-3" id="faiBtnChan" onclick="faiDoiChan()"></button>
+                    <button type="button" class="btn btn-sm btn-outline-warning px-3 d-none" id="faiBtnPQ" onclick="pqMoBang()">👑 Phân quyền</button>
                 </div>
             </div>
             <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
                 <input type="date" class="form-control form-control-sm fw-bold" style="width:150px;" id="faiDate" onchange="faiXem.date=this.value; faiNghe(this.value); faiRender()">
-                <select class="form-select form-select-sm fw-bold" style="width:160px;" onchange="faiXem.xuong=this.value; faiRender()">
+                <select class="form-select form-select-sm fw-bold" style="width:160px;" id="faiLocXuong" onchange="faiXem.xuong=this.value; faiRender()">
                     <option value="ALL">Tất cả xưởng</option><option value="X1">Xưởng 1 (M1–M11)</option><option value="X2">Xưởng 2 (M1–M10)</option>
                 </select>
                 <select class="form-select form-select-sm fw-bold" style="width:130px;" onchange="faiXem.ca=this.value; faiRender()">
                     <option value="ALL">Cả 2 ca</option><option value="Ca Ngày">Ca Ngày</option><option value="Ca Đêm">Ca Đêm</option>
                 </select>
+                <span class="badge bg-secondary px-2 py-2" id="faiQuyenToi"></span>
                 <span class="small fw-bold ms-auto" id="faiTongHop"></span>
             </div>
             <div class="table-responsive">
@@ -327,6 +332,22 @@ function faiRender() {
     }
     let dEl = document.getElementById('faiDate');
     if (dEl && dEl.value !== faiXem.date) dEl.value = faiXem.date;
+    let xEl = document.getElementById('faiLocXuong');
+    if (xEl && xEl.value !== faiXem.xuong) xEl.value = faiXem.xuong;
+    if (typeof pqXuongCuaToi === 'function') {
+        let pq = document.getElementById('faiBtnPQ');
+        if (pq) {
+            let hien = pqLaAdmin() || !pqCoAdmin();
+            pq.classList.toggle('d-none', !hien);
+            pq.textContent = pqCoAdmin() ? '👑 Phân quyền' : '👑 Nhận quyền Admin';
+        }
+        let q = document.getElementById('faiQuyenToi');
+        if (q) {
+            let x = pqXuongCuaToi();
+            q.className = 'badge px-2 py-2 ' + (pqLaAdmin() ? 'bg-warning text-dark' : x === 'ALL' ? 'bg-secondary' : 'bg-info text-dark');
+            q.textContent = pqLaAdmin() ? '👑 Admin' : '👤 ' + PQ_TEN_XUONG[x];
+        }
+    }
     let b = document.getElementById('faiBtnChan');
     if (b) {
         let bat = faiCfg.chanTab2 !== false;
@@ -393,26 +414,58 @@ function faiXoaPhieu(date, id) {
 }
 
 // ===================== 6. TẠO PHIẾU TAY =====================
+let faiXuongDaAp = false;
+// Lần đầu sau khi có phân quyền: bộ lọc Tab 7 mặc định theo xưởng của tài khoản
+function faiApXuongMacDinh() {
+    if (faiXuongDaAp || typeof pqXuongCuaToi !== 'function') return;
+    faiXuongDaAp = true;
+    let x = pqXuongCuaToi();
+    if (x !== 'ALL') faiXem.xuong = x;
+}
 function faiTaoPhieuTay(date, ca, m, lyDo) {
     if (!checkAuthOrAlert() || !db) return;
+    let xToi = typeof pqXuongCuaToi === 'function' ? pqXuongCuaToi() : 'ALL';
+    if (m && typeof pqKiemMay === 'function') { let loi = pqKiemMay(m); if (loi) { alert(loi); return; } }
     let ht = dkCaHienTai();
     date = date || ht.date; ca = ca || ht.ca;
     let el = dkTaoModal('faiTaoModal', '➕ TẠO PHIẾU KIỂM HÀNG ĐẦU TIÊN', '',
         `<button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3" data-bs-dismiss="modal">Đóng</button>
          <button type="button" class="btn btn-sm btn-3d-emerald px-4" onclick="faiLuuTaoTay()">Tạo phiếu</button>`);
-    let mayOpts = '';
-    qcDsMay('ALL').forEach(i => { mayOpts += `<option value="${i}" ${i === parseInt(m) ? 'selected' : ''}>${qcTenMay(i)} – Xưởng ${qcSoXuong(i)}</option>`; });
+    // Xưởng mặc định: xưởng được phân quyền > xưởng của máy truyền vào > bộ lọc đang xem > để trống bắt buộc chọn
+    let xuong = xToi !== 'ALL' ? xToi : (m ? (parseInt(m) >= 11 ? 'X1' : 'X2') : (faiXem.xuong !== 'ALL' ? faiXem.xuong : ''));
+    let khoa = xToi !== 'ALL';
+    let xOpts = ['X1', 'X2'].map(x => `<option value="${x}" ${x === xuong ? 'selected' : ''}>${x === 'X1' ? 'Xưởng 1 (M1–M11)' : 'Xưởng 2 (M1–M10)'}</option>`).join('');
     document.getElementById('faiTaoModalBody').innerHTML = `
         <div class="row g-2">
-            <div class="col-6"><label class="small fw-bold">Ngày</label><input type="date" class="form-control form-control-sm" id="faiTNgay" value="${date}"></div>
-            <div class="col-6"><label class="small fw-bold">Ca</label><select class="form-select form-select-sm" id="faiTCa">
+            <div class="col-6"><label class="small fw-bold">Ngày</label><input type="date" class="form-control form-control-sm" id="faiTNgay" value="${date}" onchange="faiTGoiYKhuon()"></div>
+            <div class="col-6"><label class="small fw-bold">Ca</label><select class="form-select form-select-sm" id="faiTCa" onchange="faiTGoiYKhuon()">
                 <option ${ca === 'Ca Ngày' ? 'selected' : ''}>Ca Ngày</option><option ${ca === 'Ca Đêm' ? 'selected' : ''}>Ca Đêm</option></select></div>
-            <div class="col-6"><label class="small fw-bold">Máy</label><select class="form-select form-select-sm fw-bold" id="faiTMay" onchange="faiTGoiYKhuon()"><option value="">—</option>${mayOpts}</select></div>
-            <div class="col-6"><label class="small fw-bold">Nguyên nhân đưa kiểm</label><select class="form-select form-select-sm" id="faiTLyDo">
+            <div class="col-6"><label class="small fw-bold">Xưởng ${khoa ? '<span class="badge bg-info text-dark">🔒 theo phân quyền</span>' : ''}</label>
+                <select class="form-select form-select-sm fw-bold" id="faiTXuong" onchange="faiTDoiXuong()" ${khoa ? 'disabled' : ''}>
+                <option value="">— Chọn xưởng —</option>${xOpts}</select></div>
+            <div class="col-6"><label class="small fw-bold">Máy</label><select class="form-select form-select-sm fw-bold" id="faiTMay" onchange="faiTGoiYKhuon()"></select></div>
+            <div class="col-12"><label class="small fw-bold">Nguyên nhân đưa kiểm</label><select class="form-select form-select-sm" id="faiTLyDo">
                 ${faiLyDoChon().map(k => `<option value="${k}" ${k === (lyDo || 'len_khuon') ? 'selected' : ''}>${FAI_LY_DO[k].ten}</option>`).join('')}</select></div>
             <div class="col-12"><label class="small fw-bold">Mã khuôn</label><input type="text" class="form-control form-control-sm fw-bold" id="faiTKhuon" list="moldOptionsList" placeholder="Tự lấy theo PM ép nhựa"></div>
         </div>`;
+    faiTDoiXuong(m);
     bootstrap.Modal.getOrCreateInstance(el).show();
+}
+// Đổi xưởng -> nạp lại danh sách máy của xưởng đó
+function faiTDoiXuong(mChon) {
+    let x = (document.getElementById('faiTXuong') || {}).value;
+    let sel = document.getElementById('faiTMay');
+    if (!sel) return;
+    if (!x) {
+        sel.innerHTML = '<option value="">← Chọn xưởng trước</option>';
+        sel.disabled = true;
+    } else {
+        sel.disabled = false;
+        sel.innerHTML = '<option value="">— Chọn máy —</option>' + pqDsMayXuong(x)
+            .map(i => `<option value="${i}" ${i === parseInt(mChon) ? 'selected' : ''}>${qcTenMay(i)}</option>`).join('');
+    }
+    let k = document.getElementById('faiTKhuon');
+    if (k && !mChon) k.value = '';
     faiTGoiYKhuon();
 }
 function faiTGoiYKhuon() {
@@ -424,7 +477,12 @@ async function faiLuuTaoTay() {
     let date = document.getElementById('faiTNgay').value, ca = document.getElementById('faiTCa').value;
     let m = parseInt(document.getElementById('faiTMay').value), lyDo = document.getElementById('faiTLyDo').value;
     let mold = document.getElementById('faiTKhuon').value.trim();
+    let xuong = document.getElementById('faiTXuong').value;
+    if (!xuong) { alert('⚠️ Chọn xưởng trước.'); return; }
     if (!date || !m || !mold) { alert('⚠️ Chọn ngày, máy và mã khuôn.'); return; }
+    if (pqXuongCuaMay(m) !== xuong) { alert('⚠️ Máy không thuộc xưởng đã chọn – chọn lại.'); return; }
+    let loiQuyen = pqKiemMay(m);
+    if (loiQuyen) { alert(loiQuyen); return; }
     faiNghe(date);
     let rec = faiPhieuMoi(date, ca, m, mold, lyDo, false);
     try {
@@ -446,6 +504,7 @@ async function faiMoPhieu(date, id) {
     if (!checkAuthOrAlert()) return;
     let rec = (faiStore[date] || {})[id];
     if (!rec) { alert('Không tìm thấy phiếu.'); return; }
+    if (typeof pqKiemMay === 'function') { let loi = pqKiemMay(rec.may); if (loi) { alert(loi); return; } }
     faiDangSua = { date, id, rec };
     faiAnhTam = [];
     let qc = rec.qc || {}, muc = qc.muc || {}, sx = rec.sx || {};
