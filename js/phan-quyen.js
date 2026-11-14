@@ -107,7 +107,10 @@ function pqVeBang() {
             <td class="text-start fw-bold">${escapeHtml(pqTenNgan(u.email || u.k))}${u.k === toi ? ' <span class="badge bg-info text-dark">bạn</span>' : ''}</td>
             <td>${ad ? '<span class="badge bg-warning text-dark px-3 py-2">👑 Admin</span>'
                 : `<select class="form-select form-select-sm fw-bold" onchange="pqDoiXuong('${u.k}', this.value)">${opt}</select>`}</td>
-            <td>${u.k === toi || ad ? '' : `<button type="button" class="btn btn-sm btn-outline-danger py-0 px-2" title="Xóa khỏi danh sách" onclick="pqXoa('${u.k}')">🗑️</button>`}</td>
+            <td class="text-nowrap">${u.k === toi ? '' : (ad
+                ? `<button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="pqDoiAdmin('${u.k}', false)">Gỡ Admin</button>`
+                : `<button type="button" class="btn btn-sm btn-outline-warning py-0 px-2" onclick="pqDoiAdmin('${u.k}', true)">👑 Cho làm Admin</button>
+                   <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2" title="Xóa khỏi danh sách" onclick="pqXoa('${u.k}')">🗑️</button>`)}</td>
         </tr>`;
     }).join('');
     body.innerHTML = `
@@ -120,7 +123,7 @@ function pqVeBang() {
             <div class="col-6 col-md-3"><button type="button" class="btn btn-sm btn-3d-emerald w-100" id="pqBtnTao" onclick="pqTaoTaiKhoan()">Tạo tài khoản</button></div>
         </div>
         <div class="table-responsive"><table class="table table-bordered table-sm align-middle text-center mb-0">
-            <thead><tr><th>Tài khoản</th><th style="width:190px;">Xưởng</th><th style="width:60px;"></th></tr></thead>
+            <thead><tr><th>Tài khoản</th><th style="width:190px;">Xưởng</th><th style="width:200px;"></th></tr></thead>
             <tbody>${dong || '<tr><td colspan="3" class="opacity-75">Chưa có tài khoản</td></tr>'}</tbody>
         </table></div>`;
 }
@@ -155,6 +158,12 @@ async function pqTaoTaiKhoan() {
 function pqDoiXuong(k, x) {
     if (!pqLaAdmin()) return;
     db.ref(`${PQ_PATH}/users/${k}/xuong`).set(x).catch(e => alert('❌ ' + e.message));
+}
+function pqDoiAdmin(k, bat) {
+    if (!pqLaAdmin()) return;
+    let email = ((pqData.users || {})[k] || {}).email || (pqData.admins || {})[k] || k;
+    if (!confirm(bat ? `Cho ${pqTenNgan(email)} làm ADMIN?` : `Gỡ quyền ADMIN của ${pqTenNgan(email)}?`)) return;
+    db.ref(`${PQ_PATH}/admins/${k}`).set(bat ? email : null).catch(e => alert('❌ ' + e.message));
 }
 function pqXoa(k) {
     if (!pqLaAdmin()) return;
