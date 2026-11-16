@@ -30,6 +30,22 @@ const GOOGLE_DRIVE_FOLDER_ID = "1m8rzMVgucC2DT9o_2lYGjBb5tuwrX8no";
 const GOOGLE_DRIVE_FOLDER_URL = "https://drive.google.com/drive/folders/1m8rzMVgucC2DT9o_2lYGjBb5tuwrX8no?usp=drive_link";
 const MAX_IMAGE_BYTES = 100 * 1024; // Chuẩn dung lượng tối ưu ~100KB (chất lượng HD siêu nét)
 
+// MÁY CHỦ MES (PM ép nhựa) – QC chỉ ĐỌC. Đổi máy chủ: chỉ sửa ở đây.
+// apikey là khóa anon công khai (không phải mật khẩu); quyền đọc vẫn phải đăng nhập tài khoản MES.
+const MES_SERVERS = {
+    // Máy chủ riêng của Hải Tân (từ 11/2026)
+    moi: {
+        url: 'https://api.haitan.online',
+        key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzk0NzIyMzM2LCJleHAiOjIxMTAwODIzMzZ9.42JzRraZfkRKue0zCtilf-qyf5avvBg4fzDSn9toKD8'
+    },
+    // Supabase cloud cũ – giữ lại để quay về nếu máy chủ mới gặp sự cố
+    cu: {
+        url: 'https://xxpagqtvkyrmtvozopah.supabase.co',
+        key: 'sb_publishable_gCvhq5HORR7SqulpO7gNNg_YfV8Lmh4'
+    }
+};
+const MES_SERVER_DANG_DUNG = 'moi';   // 'moi' | 'cu'
+
 // FIREBASE REALTIME
 const firebaseConfig = {
     apiKey: "AIzaSyACU4mFuzc67084F517XzOam40mdqyPnvA",

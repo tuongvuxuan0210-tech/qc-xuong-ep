@@ -5,8 +5,9 @@
  * LỊCH SỬ NGUỒN DỮ LIỆU CỦA MES (quanlyepnhua.netlify.app):
  *   - Trước 11/10/2026: Realtime Database "haithien"
  *   - 11/10 -> 13/10/2026: Cloud Firestore "haitan1" (collection mes_nodes)
- *   - Từ 13/10/2026: SUPABASE (project xxpagqtvkyrmtvozopah) – Firestore "haitan1" KHÔNG còn
- *     được cập nhật, nên QC vẫn báo "đồng bộ" nhưng mã khuôn đứng yên ở dữ liệu cũ.
+ *   - 13/10/2026 -> 11/2026: SUPABASE cloud (project xxpagqtvkyrmtvozopah)
+ *   - Từ 11/2026: máy chủ riêng https://api.haitan.online (cùng thành phần Supabase: GoTrue, PostgREST)
+ *     – đường dẫn API, tên hàm, cấu trúc dữ liệu giữ nguyên; chỉ đổi địa chỉ + apikey (xem js/config.js).
  *
  * Module này CHỈ ĐỌC 2 node từ MES qua RPC Supabase "mes_read_nodes":
  *   - mold_prod_v12_mes_clean   : nhật ký sản lượng -> mã khuôn đang chạy theo ngày/máy/ca
@@ -17,9 +18,23 @@
  * Kiểm tra thay đổi bằng RPC "mes_versions" (chỉ trả về số revision, rất nhẹ) mỗi 30 giây.
  */
 
-// Cấu hình công khai của MES (publishable key – không phải mật khẩu; quyền đọc vẫn cần đăng nhập)
-const MES_SUPABASE_URL = 'https://xxpagqtvkyrmtvozopah.supabase.co';
-const MES_SUPABASE_KEY = 'sb_publishable_gCvhq5HORR7SqulpO7gNNg_YfV8Lmh4';
+// Địa chỉ + apikey lấy từ js/config.js (MES_SERVERS / MES_SERVER_DANG_DUNG)
+const MES_SERVER = MES_SERVERS[MES_SERVER_DANG_DUNG] || MES_SERVERS.moi;
+const MES_SUPABASE_URL = MES_SERVER.url;
+const MES_SUPABASE_KEY = MES_SERVER.key;
+const MES_STORAGE_KEY = 'qc-mes-auth-' + MES_SERVER_DANG_DUNG;   // phiên đăng nhập riêng cho từng máy chủ
+const MES_TIMEOUT_MS = 25000;                                   // thời gian chờ mỗi yêu cầu
+const MES_THU_LAI_MS = [5000, 15000, 60000];                    // mất mạng / lỗi 5xx: thử lại sau 5s, 15s, 60s
+// Xóa phiên đăng nhập (token) của máy chủ cũ để đăng nhập lại từ đầu trên máy chủ mới
+try { if (MES_SERVER_DANG_DUNG === 'moi') localStorage.removeItem('qc-mes-supabase-auth'); } catch (e) {}
+// fetch có giới hạn thời gian chờ
+function mesFetch(url, opt) {
+    opt = opt || {};
+    const c = new AbortController();
+    const t = setTimeout(() => c.abort(), MES_TIMEOUT_MS);
+    if (opt.signal) { if (opt.signal.aborted) c.abort(); else opt.signal.addEventListener('abort', () => c.abort()); }
+    return fetch(url, Object.assign({}, opt, { signal: c.signal })).finally(() => clearTimeout(t));
+}
 const MES_KEY_PROD = 'mold_prod_v12_mes_clean';
 const MES_KEY_CATALOG = 'mold_catalog_v12_mes_clean';
 const MES_KEYS = [MES_KEY_PROD, MES_KEY_CATALOG];
@@ -37,6 +52,8 @@ let mesAuthReady = false;
 let mesAutoLoginTried = false;
 let mesState = { status: 'off', message: '', lastSync: null };
 let mesConnectModalInstance = null;
+let mesLoiLienTiep = 0;
+let mesThuLaiTimer = null;
 // Đơn hàng (khách hàng, mã đơn, màu, nhựa) – dùng cho phiếu kiểm hàng đầu tiên (Tab 7). Đọc riêng, 5 phút/lần;
 // lỗi ở đây không ảnh hưởng việc đồng bộ mã khuôn.
 const MES_KEY_ORDERS = ['mold_orders_v12_mes_clean', 'mold_planned_orders_v12_mes_clean'];
@@ -47,8 +64,7 @@ async function mesTaiDonHang(force) {
     if (!force && Date.now() - mesOrdersAt < 300000) return;
     mesOrdersAt = Date.now();
     try {
-        const { data, error } = await mesClient.rpc('mes_read_nodes', { p_keys: MES_KEY_ORDERS });
-        if (error) throw error;
+        const data = await mesRpc('mes_read_nodes', { p_keys: MES_KEY_ORDERS });
         let ds = [];
         MES_KEY_ORDERS.forEach(k => {
             let v = data && data[k] && data[k].value;
@@ -60,6 +76,26 @@ async function mesTaiDonHang(force) {
     }
 }
 
+// Lỗi token (401 / JWT hết hạn): làm mới phiên rồi gửi lại đúng yêu cầu đó 1 lần
+function mesLaLoiToken(e) {
+    const m = String((e && (e.message || e.code)) || '') + ' ' + String((e && (e.status || e.code)) || '');
+    return /jwt|token|401|PGRST30[0-3]/i.test(m);
+}
+function mesLaLoiMang(e) {
+    const m = String((e && (e.message || e.name || e.code)) || e || '');
+    return /fetch|network|abort|timeout|failed|5\d\d|502|503|504/i.test(m) || (e && e.status >= 500);
+}
+async function mesRpc(ten, thamSo) {
+    let r = await mesClient.rpc(ten, thamSo);
+    if (r.error && mesLaLoiToken(r.error)) {
+        const { error: eRf } = await mesClient.auth.refreshSession();
+        if (eRf) { try { await mesClient.auth.signOut(); } catch (x) {} throw r.error; }
+        r = await mesClient.rpc(ten, thamSo);
+    }
+    if (r.error) throw r.error;
+    return r.data;
+}
+
 function mesInit() {
     if (mesClient) return true;
     const sdk = window.supabase;
@@ -69,7 +105,9 @@ function mesInit() {
     }
     try {
         mesClient = sdk.createClient(MES_SUPABASE_URL, MES_SUPABASE_KEY, {
-            auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storageKey: 'qc-mes-supabase-auth' }
+            auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storageKey: MES_STORAGE_KEY },
+            global: { fetch: mesFetch },
+            realtime: { params: { eventsPerSecond: 2 } }
         });
         mesClient.auth.onAuthStateChange((event, session) => {
             const user = session ? session.user : null;
@@ -140,6 +178,8 @@ function mesDangXuat() {
 function mesStopListeners() {
     mesRunning = false;
     if (mesPollTimer) { clearInterval(mesPollTimer); mesPollTimer = null; }
+    if (mesThuLaiTimer) { clearTimeout(mesThuLaiTimer); mesThuLaiTimer = null; }
+    mesLoiLienTiep = 0;
     mesRevisions = {};
 }
 
@@ -164,14 +204,12 @@ async function mesRefresh(full) {
     try {
         let keys = MES_KEYS;
         if (!full && Object.keys(mesRevisions).length) {
-            const { data: st, error } = await mesClient.rpc('mes_versions', { p_keys: MES_KEYS });
-            if (error) throw error;
+            const st = await mesRpc('mes_versions', { p_keys: MES_KEYS });
             const versions = (st && st.versions) || {};
             keys = MES_KEYS.filter(k => versions[k] === undefined || String(versions[k] && versions[k].revision !== undefined ? versions[k].revision : versions[k]) !== String(mesRevisions[k]));
             if (!keys.length) { mesSetState('ok', ''); return; }
         }
-        const { data, error } = await mesClient.rpc('mes_read_nodes', { p_keys: keys });
-        if (error) throw error;
+        const data = await mesRpc('mes_read_nodes', { p_keys: keys });
         if (!mesRunning) return;
         keys.forEach(k => {
             const node = data && data[k];
@@ -180,10 +218,16 @@ async function mesRefresh(full) {
             mesApply(k, node.value);
         });
         mesSetState('ok', '');
+        mesLoiLienTiep = 0;
         mesTaiDonHang(false);
     } catch (e) {
-        console.warn('PM ép nhựa - lỗi đọc dữ liệu', e);
-        mesSetState('error', mesRpcError(e));
+        console.warn('PM ép nhựa - lỗi đọc dữ liệu:', (e && (e.message || e.code)) || e);
+        mesSetState('error', mesLaLoiMang(e) ? 'Mất kết nối máy chủ MES – đang thử lại' : mesRpcError(e));
+        // Mất mạng / lỗi máy chủ: thử lại sau 5s, 15s, 60s (sau đó theo chu kỳ 30s)
+        if (mesLaLoiMang(e) && mesLoiLienTiep < MES_THU_LAI_MS.length && !mesThuLaiTimer) {
+            const cho = MES_THU_LAI_MS[mesLoiLienTiep++];
+            mesThuLaiTimer = setTimeout(() => { mesThuLaiTimer = null; mesRefresh(true); }, cho);
+        }
     } finally {
         mesBusy = false;
     }
@@ -219,7 +263,7 @@ function mesSetState(status, message) {
     if (status === 'ok') {
         const t = mesState.lastSync.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
         const email = mesUser ? mesUser.email : '';
-        html = `<span class="badge bg-success rounded-pill px-3 py-2 small shadow-sm" title="Mã khuôn đang lấy trực tiếp từ PM ép nhựa (Supabase, tài khoản ${escapeHtml(email)}). Bấm để đổi tài khoản." style="cursor:pointer;" onclick="mesMoKetNoi()">🔗 Mã khuôn: đồng bộ PM Ép Nhựa (${t})</span>`;
+        html = `<span class="badge bg-success rounded-pill px-3 py-2 small shadow-sm" title="Mã khuôn đang lấy trực tiếp từ PM ép nhựa (máy chủ ${escapeHtml(MES_SUPABASE_URL.replace(/^https?:\/\//, ''))}, tài khoản ${escapeHtml(email)}). Bấm để đổi tài khoản." style="cursor:pointer;" onclick="mesMoKetNoi()">🔗 Mã khuôn: đồng bộ PM Ép Nhựa (${t})</span>`;
     } else if (status === 'connecting') {
         html = `<span class="badge bg-info text-dark rounded-pill px-3 py-2 small shadow-sm">⏳ Đang kết nối PM Ép Nhựa...</span>`;
     } else if (status === 'need_login') {
@@ -287,7 +331,9 @@ async function mesKetNoi() {
         try { localStorage.setItem('qc_mes_saved_email', email); } catch (e) {}
         mesConnectModalInstance.hide();
     } catch (e) {
-        errEl.textContent = '⚠️ Email hoặc mật khẩu PM ép nhựa không đúng';
+        errEl.textContent = mesLaLoiMang(e) ? '⚠️ Không kết nối được máy chủ MES – kiểm tra mạng rồi thử lại'
+            : /too many|429|blocked/i.test(String(e && e.message)) ? '⚠️ Sai mật khẩu quá nhiều lần – máy chủ tạm chặn, thử lại sau 1 giờ'
+            : '⚠️ Email hoặc mật khẩu PM ép nhựa không đúng';
         errEl.classList.remove('d-none');
     } finally {
         btn.disabled = false; btn.textContent = 'Kết nối';
