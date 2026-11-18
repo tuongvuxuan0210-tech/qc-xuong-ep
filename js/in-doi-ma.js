@@ -92,7 +92,7 @@ function dmTenLucHtml(p, k) { let t = (p.tenLuc || {})[k]; return t ? `<span cla
 
 // ===================== LẮNG NGHE FIREBASE =====================
 function dmVeLai() {
-    if (!['dm', 'deco'].includes(inSub)) return;
+    if (!['dm', 'deco', 'tong'].includes(inSub)) return;
     let ae = document.activeElement, root = document.getElementById('inRoot');
     if (root && ae && root.contains(ae) && /^(INPUT|TEXTAREA)$/.test(ae.tagName) && !/checkbox|radio|file/.test(ae.type)) { inPendingRender = true; return; }
     renderTabIn();
