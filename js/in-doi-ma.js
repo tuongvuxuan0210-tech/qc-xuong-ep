@@ -1,7 +1,8 @@
 /**
  * QC System - Tab 4 Xưởng in: PHIẾU CHECK ĐỔI MÃ HÀNG (BM-IN-01)
  * Chống sót bước in khi đổi mã: gọi deco bản mới nhất → A chuẩn bị → B lắp đặt (tick từng bước)
- * → đếm nét in so với deco → C QC kiểm 5 SP đầu → 3 người ký (KTV, tổ trưởng, QC) mới chạy đại trà.
+ * → đếm nét in so với deco → C QC kiểm 5 SP đầu. Phiếu luân chuyển ① KTV → ② tổ trưởng đếm lại → ③ QC kết luận;
+ * mỗi người nhập tên mình (3 tên khác nhau), ai đã bấm chuyển thì phần đó khóa lại.
  * Bộ phận in chưa có lệnh trên phần mềm sản xuất → phiếu chỉ ghi nhận và cảnh báo trên phần mềm QC.
  *
  * Dữ liệu Firebase:
@@ -50,8 +51,42 @@ function dmLa10k(b) { return /1万|10\.000/.test(b.ghi_chu || ''); } // bản in
 function dmSig(sp) { return `${sp.phien_ban_deco || ''}|${sp.ngay_lap || ''}|${sp.tong_buoc_in || 0}`; }
 function dmCaTen(c) { return c === 'DEM' ? '🌙 Ca đêm' : '☀️ Ca ngày'; }
 function dmCoQuyenNap() { return typeof pqLaAdmin === 'function' ? (pqLaAdmin() || (typeof pqCoAdmin === 'function' && !pqCoAdmin())) : true; }
-function dmStamp(ten) { return { ten: ten || inUser(), acc: inUser(), at: inNowHM() }; }
-function dmKyHtml(s) { return s ? `${inEsc(s.ten || s.acc || '')} · ${inEsc(s.at || '')}` : ''; }
+// Mỗi trình duyệt / điện thoại có 1 mã thiết bị riêng (lưu trong máy) để chặn 1 người nhập 2 tên trên cùng máy
+function dmThietBi() {
+    if (dmThietBi._v) return dmThietBi._v;
+    let id = '';
+    try { id = localStorage.getItem('qc_thiet_bi_id') || ''; if (!id) { id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8); localStorage.setItem('qc_thiet_bi_id', id); } }
+    catch (e) { id = 'tam' + Math.random().toString(36).slice(2, 8); }
+    let ua = (typeof navigator !== 'undefined' && navigator.userAgent) || '';
+    let os = /Android/i.test(ua) ? 'Android' : /iPhone|iPad/i.test(ua) ? 'iPhone' : /Windows/i.test(ua) ? 'Windows' : /Mac/i.test(ua) ? 'Mac' : 'Máy';
+    return (dmThietBi._v = { id, ten: `${os}·${id.slice(-4).toUpperCase()}` });
+}
+function dmGio() { let d = new Date(); return [d.getHours(), d.getMinutes(), d.getSeconds()].map(x => String(x).padStart(2, '0')).join(':'); }
+function dmStamp(ten) { let tb = dmThietBi(); return { ten: ten || inUser(), acc: inUser(), at: dmGio(), ts: Date.now(), dev: tb.id, tb: tb.ten }; }
+function dmKyHtml(s, coMay) { return s ? `${inEsc(s.ten || s.acc || '')} · ${inEsc(s.at || '')}${coMay && s.tb ? ` · 📱 ${inEsc(s.tb)}` : ''}` : ''; }
+// Thiết bị đã dùng ở bước KTV / tổ trưởng (để bước sau không được làm trên cùng máy)
+function dmTbBuoc(p, buoc) {
+    let s = new Set(), add = x => { if (x && x.dev) s.add(x.dev); };
+    if (buoc === 'KTV') {
+        add((p.ky || {}).ktv); add((p.tenLuc || {}).ktv);
+        Object.values(p.b || {}).forEach(lk => Object.values(lk || {}).forEach(st => DM_B.forEach(([k]) => add((st || {})[k]))));
+        Object.values(p.demLuc || {}).forEach(add);
+    } else {
+        add((p.ky || {}).toTruong); add((p.tenLuc || {}).toTruong);
+        Object.values(p.demTTLuc || {}).forEach(add);
+    }
+    return s;
+}
+// Trả về lý do chặn nếu máy đang dùng đã làm bước trước của phiếu, ngược lại ''
+function dmChanMay(p) {
+    let b = dmBuoc(p), me = dmThietBi().id;
+    if (b === 'TT' && dmTbBuoc(p, 'KTV').has(me)) return 'Máy này đã dùng cho bước KỸ THUẬT VIÊN của phiếu – tổ trưởng phải dùng điện thoại / máy khác.';
+    if (b === 'QC' && dmTbBuoc(p, 'KTV').has(me)) return 'Máy này đã dùng cho bước KỸ THUẬT VIÊN của phiếu – QC phải dùng điện thoại / máy khác.';
+    if (b === 'QC' && dmTbBuoc(p, 'TT').has(me)) return 'Máy này đã dùng cho bước TỔ TRƯỞNG của phiếu – QC phải dùng điện thoại / máy khác.';
+    return '';
+}
+function dmPhutGiua(a, b) { if (!a || !b) return ''; let g = Math.max(0, Math.round((b - a) / 1000)); return g < 60 ? `${g} giây` : g < 3600 ? `${Math.floor(g / 60)} phút ${g % 60} giây` : `${Math.floor(g / 3600)} giờ ${Math.floor(g % 3600 / 60)} phút`; }
+function dmTenLucHtml(p, k) { let t = (p.tenLuc || {})[k]; return t ? `<span class="dm-who">Tên nhập lúc ${inEsc(t.at || '')}${t.tb ? ` · 📱 ${inEsc(t.tb)}` : ''}</span>` : ''; }
 
 // ===================== LẮNG NGHE FIREBASE =====================
 function dmVeLai() {
@@ -108,15 +143,17 @@ function dmWrite(id, rel, val) {
             .catch(err => inToast('⚠️ Không lưu được lên Firebase: ' + (err && err.message ? err.message : err), true));
     }
 }
-// Phiếu thay đổi sau khi đã ký → hủy chữ ký
-function dmHuyKyNeuCo(id, rel) {
-    let p = dmPhieu[id]; if (!p) return;
-    if (!/^(a|b|dem|c|boLk|may)(\/|$)/.test(rel)) return;
-    if (p.ky && Object.keys(p.ky).length) {
-        dmWrite(id, 'ky', null); dmWrite(id, 'kl', null);
-        inToast('Phiếu thay đổi sau khi ký – các chữ ký đã bị hủy, phải ký lại.', true);
-    }
-}
+// ===================== LUÂN CHUYỂN 3 NGƯỜI =====================
+// Thứ tự: KTV (A, B lắp đặt, đếm nét) → Tổ trưởng (đếm lại độc lập) → QC (C, kết luận).
+// Người nào bấm "hoàn thành" thì phần đó khóa lại, phiếu chuyển sang chờ người tiếp theo.
+const DM_BUOC = [
+    ['KTV', '① Kỹ thuật viên', 'Lắp đặt & đếm nét', 'ktv'],
+    ['TT', '② Tổ trưởng', 'Đếm lại nét in', 'toTruong'],
+    ['QC', '③ QC', 'Kiểm 5 SP đầu & kết luận', 'qc']
+];
+function dmBuoc(p) { return p.kl === 'DAT' ? 'DAT' : (['KTV', 'TT', 'QC'].includes(p.buoc) ? p.buoc : 'KTV'); }
+function dmTenChuan(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().replace(/\s+/g, ' ').trim(); }
+function dmPhut(ts) { if (!ts) return ''; let m = Math.max(0, Math.round((Date.now() - ts) / 60000)); return m < 60 ? `${m} phút` : `${Math.floor(m / 60)} giờ ${m % 60} phút`; }
 
 // ===================== TÍNH TOÁN TRẠNG THÁI =====================
 function dmLks(p) { return dmArr(p.lk).map((lk, i) => [i, lk]).filter(([i, lk]) => lk && !(p.boLk || {})[i]); }
@@ -126,14 +163,15 @@ function dmTinhLk(p, i, lk) {
     let bCan = tinh.length * DM_B.length, bXong = 0;
     tinh.forEach(([j]) => DM_B.forEach(([k]) => { if (((bv[j] || {})[k] || {}).at) bXong++; }));
     let net = tinh.reduce((s, [, b]) => s + dmLuot(b), 0);
-    let dem = dmNum((p.dem || {})[i]);
+    let dem = dmNum((p.dem || {})[i]), demTT = dmNum((p.demTT || {})[i]);
     let cv = (p.c || {})[i] || {}, co = cv.co || {}, kq = cv.kq || {};
     let coXong = tinh.filter(([j]) => co[j]).length;
     let o = 0, ng = 0;
     DM_C.forEach((_, ci) => [0, 1, 2, 3, 4].forEach(si => { let v = (kq[ci] || {})[si]; if (v === 'OK') o++; else if (v === 'NG') ng++; }));
     return {
-        buoc, tinh, bCan, bXong, bDu: bXong === bCan, net, dem,
+        buoc, tinh, bCan, bXong, bDu: bXong === bCan, net, dem, demTT,
         demDung: dem !== null && dem === net, demLech: dem !== null && dem !== net,
+        ttDung: demTT !== null && demTT === net, ttLech: demTT !== null && demTT !== net,
         coXong, coDu: coXong === tinh.length, cOk: o === DM_C.length * 5, cNg: ng > 0,
         cDu: coXong === tinh.length && o === DM_C.length * 5
     };
@@ -148,29 +186,45 @@ function dmCalc(p) {
     let a = DM_A.map((_, i) => (p.a || {})[i]);
     let aOk = a.every(v => v === 'OK'), aNg = a.some(v => v === 'NG');
     let bCan = lks.reduce((s, x) => s + x.t.bCan, 0), bXong = lks.reduce((s, x) => s + x.t.bXong, 0);
-    let bDu = lks.length > 0 && lks.every(x => x.t.bDu);
-    let demDu = lks.length > 0 && lks.every(x => x.t.demDung), demLech = lks.some(x => x.t.demLech);
-    let cDu = lks.length > 0 && lks.every(x => x.t.cDu), cNg = lks.some(x => x.t.cNg);
-    let decoCu = dmDecoCu(p);
-    let choQC = aOk && bDu && demDu && !decoCu;
-    let choKy = choQC && cDu && !cNg;
-    let ky = p.ky || {}, soKy = DM_KY.filter(([k]) => ky[k]).length;
+    let co = lks.length > 0;
+    let bDu = co && lks.every(x => x.t.bDu);
+    let demDu = co && lks.every(x => x.t.demDung), demLech = lks.some(x => x.t.demLech);
+    let ttDu = co && lks.every(x => x.t.ttDung), ttLech = lks.some(x => x.t.ttLech);
+    let cDu = co && lks.every(x => x.t.cDu), cNg = lks.some(x => x.t.cNg);
+    let decoCu = dmDecoCu(p), buoc = dmBuoc(p);
+    let ktvTen = String(p.ktv || '').trim(), ttTen = String(p.toTruong || '').trim(), qcTen = String(p.qcTen || '').trim();
+    let ttTrung = ttTen && dmTenChuan(ttTen) === dmTenChuan(ktvTen);
+    let qcTrung = qcTen && (dmTenChuan(qcTen) === dmTenChuan(ktvTen) || dmTenChuan(qcTen) === dmTenChuan(ttTen));
+    let xongKTV = !decoCu && aOk && bDu && demDu && !!ktvTen;
+    let xongTT = !decoCu && ttDu && !!ttTen && !ttTrung;
+    let xongQC = !decoCu && cDu && !cNg && !!qcTen && !qcTrung;
     let lan = Object.keys(p.lan || {}).length;
+    // thời điểm bắt đầu chờ bước hiện tại
+    let ky = p.ky || {};
+    let tuLuc = buoc === 'TT' ? (ky.ktv || {}).ts : buoc === 'QC' ? (ky.toTruong || {}).ts : (p.lamLaiTs || p.t);
     let st, cls;
-    if (p.kl === 'DAT') { st = 'ĐẠT – được chạy đại trà'; cls = 'ok'; }
+    if (buoc === 'DAT') { st = 'ĐẠT – được chạy đại trà'; cls = 'ok'; }
     else if (decoCu) { st = 'Deco đã đổi bản – không dùng phiếu này'; cls = 'ng'; }
-    else if (!lks.length) { st = 'Chưa chọn linh kiện'; cls = 'warn'; }
-    else if (aNg) { st = 'A. Chuẩn bị KHÔNG ĐẠT'; cls = 'ng'; }
-    else if (demLech) { st = 'KHÓA: lệch số nét in'; cls = 'ng'; }
-    else if (cNg) { st = 'C. QC có mục KHÔNG ĐẠT'; cls = 'ng'; }
-    else if (!aOk) { st = 'A. Đang chuẩn bị'; cls = 'warn'; }
-    else if (!bDu) { st = `B. Đang lắp ${bXong}/${bCan}`; cls = 'warn'; }
-    else if (!demDu) { st = 'Chờ đếm nét in'; cls = 'warn'; }
-    else if (!cDu) { st = 'C. Chờ QC kiểm 5 SP đầu'; cls = 'yellow'; }
-    else { st = `Chờ ký xác nhận (${soKy}/3)`; cls = 'yellow'; }
-    if (lan && p.kl !== 'DAT') st = `Làm lại lần ${lan + 1} · ` + st;
-    return { lks, a, aOk, aNg, bCan, bXong, bDu, demDu, demLech, cDu, cNg, decoCu, choQC, choKy, soKy, lan, st, cls, dat: p.kl === 'DAT' };
+    else if (buoc === 'KTV') {
+        if (!lks.length) { st = 'Chờ KTV: chọn linh kiện'; cls = 'warn'; }
+        else if (aNg) { st = 'Chờ KTV: chuẩn bị KHÔNG ĐẠT'; cls = 'ng'; }
+        else if (demLech) { st = 'Chờ KTV: KHÓA – đếm nét lệch deco'; cls = 'ng'; }
+        else if (!aOk) { st = 'Chờ KTV: chuẩn bị (A)'; cls = 'warn'; }
+        else if (!bDu) { st = `Chờ KTV: lắp đặt ${bXong}/${bCan}`; cls = 'warn'; }
+        else if (!demDu) { st = 'Chờ KTV: đếm nét in'; cls = 'warn'; }
+        else { st = 'Chờ KTV bấm hoàn thành'; cls = 'warn'; }
+    } else if (buoc === 'TT') {
+        if (ttLech) { st = 'Chờ TỔ TRƯỞNG: đếm lại không khớp'; cls = 'ng'; }
+        else { st = 'Chờ TỔ TRƯỞNG đếm lại nét in'; cls = 'yellow'; }
+    } else {
+        if (cNg) { st = 'Chờ QC: có mục KHÔNG ĐẠT'; cls = 'ng'; }
+        else { st = 'Chờ QC kiểm 5 SP đầu'; cls = 'yellow'; }
+    }
+    if (lan && buoc !== 'DAT') st = `Làm lại lần ${lan + 1} · ` + st;
+    return { lks, a, aOk, aNg, bCan, bXong, bDu, demDu, demLech, ttDu, ttLech, cDu, cNg, decoCu, buoc, ktvTen, ttTen, qcTen, ttTrung, qcTrung,
+        xongKTV, xongTT, xongQC, lan, tuLuc, st, cls, dat: buoc === 'DAT' };
 }
+
 // Điểm "cần xác nhận" còn mở liên quan tới 1 mã sản phẩm
 function dmCxnCuaMa(ma, sp) {
     let vl = null;
@@ -185,6 +239,11 @@ function dmCxnCuaMa(ma, sp) {
     });
 }
 function dmSoPhieuMo() { return Object.values(dmPhieu || {}).filter(p => p && p.kl !== 'DAT').length; }
+function dmDemCho() {
+    let r = { KTV: 0, TT: 0, QC: 0, DAT: 0 };
+    Object.values(dmPhieu || {}).forEach(p => { if (p && typeof p === 'object') r[dmBuoc(p)]++; });
+    return r;
+}
 function dmSoCxnMo() { return Object.values(dmDeco.cxn || {}).filter(x => x && x.trang_thai !== 'da_xu_ly').length; }
 
 // ===================== VẼ: PHIẾU ĐỔI MÃ =====================
@@ -198,7 +257,7 @@ function dmRender() {
 
 function dmRenderDs() {
     let nSp = Object.keys(dmDeco.sp).length;
-    let html = `<div class="in-note">Mỗi lần <b>đổi mã hàng</b>: gọi phiếu theo mã → <b>A</b> chuẩn bị → <b>B</b> kỹ thuật viên tick từng bước in đã lắp → <b>đếm nét in</b> trên SP đầu (lệch là khóa) → <b>C</b> QC kiểm 5 SP đầu từng linh kiện → <b>KTV, tổ trưởng, QC cùng ký</b> mới chạy đại trà. Phiếu dùng deco <b>bản mới nhất</b> trên phần mềm.</div>`;
+    let html = `<div class="in-note">Mỗi lần <b>đổi mã hàng</b>: gọi phiếu theo mã → <b>A</b> chuẩn bị → <b>B</b> kỹ thuật viên tick từng bước in đã lắp → <b>đếm nét in</b> trên SP đầu (lệch là khóa) → <b>C</b> QC kiểm 5 SP đầu. Phiếu <b>luân chuyển</b>: ① KTV làm xong bấm chuyển → ② tổ trưởng tự đếm lại nét → ③ QC kiểm và kết luận. Mỗi người nhập tên mình, 3 tên phải khác nhau; ai đã chuyển thì phần của người đó bị khóa. Phiếu dùng deco <b>bản mới nhất</b> trên phần mềm.</div>`;
     html += `<div class="in-head">
         <button type="button" class="in-subbtn ${dmXem === 'ds' ? 'active' : ''}" data-dmact="xem" data-v="ds">📋 Phiếu ngày ${inEsc(inDate())}</button>
         <button type="button" class="in-subbtn ${dmXem === 'ls' ? 'active' : ''}" data-dmact="xem" data-v="ls">🕘 Lịch sử đổi mã</button>
@@ -217,15 +276,23 @@ function dmRenderDs() {
         </div>
         ${dmGoiYMa(dmMaMoi)}
     </div>`;
-    let ds = Object.entries(dmPhieu || {}).filter(([, p]) => p && typeof p === 'object').sort((a, b) => (b[1].t || 0) - (a[1].t || 0));
+    let thuTu = { QC: 0, TT: 1, KTV: 2, DAT: 3 };
+    let ds = Object.entries(dmPhieu || {}).filter(([, p]) => p && typeof p === 'object')
+        .sort((a, b) => (thuTu[dmBuoc(a[1])] - thuTu[dmBuoc(b[1])]) || ((b[1].t || 0) - (a[1].t || 0)));
     if (!ds.length) return html + `<div class="in-empty">Ngày ${inEsc(inDate())} chưa có phiếu đổi mã nào.</div>`;
+    let dc = dmDemCho();
+    html += `<div class="d-flex flex-wrap gap-2 mb-2">
+        <span class="dm-chip ${dc.KTV ? 'now' : ''}">⏳ Chờ kỹ thuật viên: <b>${dc.KTV}</b></span>
+        <span class="dm-chip ${dc.TT ? 'now' : ''}">⏳ Chờ tổ trưởng đếm lại: <b>${dc.TT}</b></span>
+        <span class="dm-chip ${dc.QC ? 'now' : ''}">⏳ Chờ QC: <b>${dc.QC}</b></span>
+        <span class="dm-chip ok">✅ Đạt: <b>${dc.DAT}</b></span></div>`;
     html += `<div class="table-responsive"><table class="table table-bordered table-sm align-middle in-table"><thead><tr>
-        <th>Giờ lập</th><th>Ca</th><th>Mã hàng</th><th class="text-start">Tên SP</th><th>Deco</th><th>Máy</th><th>Trạng thái</th><th></th></tr></thead><tbody>`;
+        <th>Giờ lập</th><th>Ca</th><th>Mã hàng</th><th class="text-start">Tên SP</th><th>Deco</th><th>Máy</th><th>Đang ở bước</th><th>Đã chờ</th><th></th></tr></thead><tbody>`;
     ds.forEach(([id, p]) => {
         let c = dmCalc(p);
         html += `<tr><td>${inEsc(p.taoLuc || '')}</td><td>${dmCaTen(p.ca)}</td><td class="fw-bold">${inEsc(p.ma)}</td>
             <td class="text-start small">${inEsc(p.ten || '')}</td><td>${inEsc(p.phienBan || '')}</td><td>${inEsc(p.may || '')}</td>
-            <td><span class="in-status ${c.cls}">${inEsc(c.st)}</span></td>
+            <td><span class="in-status ${c.cls}">${inEsc(c.st)}</span></td><td class="small">${c.dat ? '' : dmPhut(c.tuLuc)}</td>
             <td><button type="button" class="btn btn-sm btn-3d-primary px-2" data-dmact="mo" data-v="${id}">Mở</button></td></tr>`;
     });
     return html + `</tbody></table></div>`;
@@ -245,15 +312,34 @@ function dmGoiYMa(ma) {
         ${cx.length ? `<div class="in-alert warn mt-1">⚠️ Còn ${cx.length} điểm "cần xác nhận" chưa xử lý cho mã này – xem trong phiếu.</div>` : ''}</div>`;
 }
 
+// Thanh luân chuyển: ① KTV → ② Tổ trưởng → ③ QC → ĐẠT, tô rõ bước đang chờ
+function dmThanhBuoc(p, c) {
+    let ky = p.ky || {}, cur = c.buoc, thu = ['KTV', 'TT', 'QC', 'DAT'];
+    let html = `<div class="dm-steps">`;
+    DM_BUOC.forEach(([k, nhan, viec, kyK], n) => {
+        let s = ky[kyK], xong = thu.indexOf(cur) > n, dang = cur === k;
+        let cls = xong ? 'done' : dang ? 'now' : 'wait';
+        let truoc = n === 0 ? (p.lamLaiTs || p.t) : ((p.ky || {})[DM_BUOC[n - 1][3]] || {}).ts;
+        let dong2 = xong && s ? `✍️ ${inEsc(s.ten || '')} · ${inEsc(s.at || '')}${s.tb ? `<br>📱 ${inEsc(s.tb)}` : ''}${truoc && s.ts ? `<br>⏱ làm trong ${dmPhutGiua(truoc, s.ts)}` : ''}`
+            : dang ? `⏳ ĐANG CHỜ${c.tuLuc ? ` · ${dmPhut(c.tuLuc)}` : ''}` : 'Chưa tới lượt';
+        html += `<div class="dm-step ${cls}"><div class="dm-step-t">${nhan}</div><div class="dm-step-v">${viec}</div><div class="dm-step-s">${dong2}</div></div>`;
+        html += `<div class="dm-step-arrow">➜</div>`;
+    });
+    let me = dmThietBi();
+    html += `<div class="dm-step ${cur === 'DAT' ? 'done ok' : 'wait'}"><div class="dm-step-t">✅ ĐẠT</div><div class="dm-step-v">Chạy đại trà</div><div class="dm-step-s">${cur === 'DAT' ? inEsc(p.klLuc || '') : ''}</div></div></div>
+      <div class="dm-who mb-2">Máy bạn đang dùng: <b>📱 ${inEsc(me.ten)}</b> – mỗi bước phải làm trên một máy khác nhau.</div>`;
+    return html;
+}
+
 function dmRenderPhieu(id) {
-    let p = dmPhieu[id], c = dmCalc(p), ro = c.dat;
+    let p = dmPhieu[id], c = dmCalc(p), ro = c.dat, buoc = c.buoc;
     let sp = dmDeco.sp[p.spKey], cx = dmCxnCuaMa(p.ma, sp);
     let lan = Object.entries(p.lan || {}).sort((a, b) => a[0] - b[0]);
-    let dis = ro ? 'disabled' : '';
+    let suaKTV = buoc === 'KTV' && !c.decoCu;
     let html = `<div class="in-head">
         <button type="button" class="btn btn-sm btn-outline-info px-3" data-dmact="dong">← Danh sách phiếu</button>
         <span class="in-status ${c.cls}">${inEsc(c.st)}</span>
-        ${!ro ? `<button type="button" class="in-mini in-del ms-auto" data-dmact="xoa" data-v="${id}" title="Xóa phiếu">🗑 Xóa phiếu</button>` : ''}
+        ${buoc === 'KTV' && !Object.keys(p.b || {}).length && !lan.length ? `<button type="button" class="in-mini in-del ms-auto" data-dmact="xoa" data-v="${id}" title="Xóa phiếu">🗑 Xóa phiếu</button>` : ''}
     </div>
     <div class="in-card ${c.cls}">
       <div class="in-card-h">
@@ -263,76 +349,100 @@ function dmRenderPhieu(id) {
           <div class="small opacity-75">Lập phiếu: ${inEsc(inDate())} ${inEsc(p.taoLuc || '')} · ${dmCaTen(p.ca)} · ${inEsc(p.taoBoi || '')}</div>
         </div>
         <div class="d-flex flex-wrap gap-2 align-items-end">
-          <label>Máy in số<input type="text" class="form-control form-control-sm in-w80" data-dmp="may" value="${inEsc(p.may || '')}" ${dis}></label>
-          <label>Lệnh SX / ghi chú<input type="text" class="form-control form-control-sm in-w180" data-dmp="lenh" value="${inEsc(p.lenh || '')}" ${dis}></label>
+          <label>Máy in số<input type="text" class="form-control form-control-sm in-w80" data-dmp="may" value="${inEsc(p.may || '')}" ${suaKTV ? '' : 'disabled'}></label>
+          <label>Lệnh SX / ghi chú<input type="text" class="form-control form-control-sm in-w180" data-dmp="lenh" value="${inEsc(p.lenh || '')}" ${ro ? 'disabled' : ''}></label>
         </div>
-      </div>`;
-    if (c.decoCu) html += `<div class="in-alert mb-2">⛔ Deco của mã này trên phần mềm đã đổi sang bản <b>${inEsc(sp.phien_ban_deco || '?')}</b> (${sp.tong_buoc_in} bước). Phiếu này dùng bản ${inEsc(p.phienBan || '?')} – KHÔNG dùng tiếp, hãy xóa và lập phiếu mới.</div>`;
-    if (cx.length) html += `<div class="in-alert warn mb-2">⚠️ Mã này còn ${cx.length} điểm deco "cần xác nhận" chưa xử lý – hỏi kỹ thuật trước khi chạy:<ul class="mb-0 mt-1 fw-normal">${cx.map(([, x]) => `<li>${x.ma_linh_kien ? `<b>${inEsc(x.ma_linh_kien)}</b>: ` : ''}${inEsc(x.noi_dung)}</li>`).join('')}</ul></div>`;
-    if (lan.length) html += `<div class="in-alert warn mb-2">🔁 Đã KHÔNG ĐẠT ${lan.length} lần: ${lan.map(([n, l]) => `lần ${n} (${inEsc(l.at || '')}, ${inEsc(l.by || '')}): ${inEsc(l.lyDo || '')}`).join(' · ')}</div>`;
+      </div>
+      ${dmThanhBuoc(p, c)}`;
+    if (c.decoCu) html += `<div class="in-alert mb-2">⛔ Deco của mã này trên phần mềm đã đổi sang bản <b>${inEsc(sp.phien_ban_deco || '?')}</b> (${sp.tong_buoc_in} bước). Phiếu này dùng bản ${inEsc(p.phienBan || '?')} – KHÔNG dùng tiếp, hãy lập phiếu mới.</div>`;
+    if (cx.length && !ro) html += `<div class="in-alert warn mb-2">⚠️ Mã này còn ${cx.length} điểm deco "cần xác nhận" chưa xử lý – hỏi kỹ thuật trước khi chạy:<ul class="mb-0 mt-1 fw-normal">${cx.map(([, x]) => `<li>${x.ma_linh_kien ? `<b>${inEsc(x.ma_linh_kien)}</b>: ` : ''}${inEsc(x.noi_dung)}</li>`).join('')}</ul></div>`;
+    if (lan.length) html += `<div class="in-alert warn mb-2">🔁 Đã KHÔNG ĐẠT ${lan.length} lần: ${lan.map(([n, l]) => `lần ${n} (${inEsc(l.boi || '')}, ${inEsc(l.at || '')}): ${inEsc(l.lyDo || '')}`).join(' · ')}</div>`;
 
-    // Linh kiện chạy lần này
+    // ===== ① KỸ THUẬT VIÊN =====
+    html += `<div class="dm-khoi ${buoc === 'KTV' ? 'now' : 'locked'}"><div class="dm-khoi-h">① KỸ THUẬT VIÊN – chuẩn bị, lắp đặt, đếm nét ${buoc !== 'KTV' && (p.ky || {}).ktv ? `<span class="dm-khoa">🔒 Đã chuyển – ${dmKyHtml(p.ky.ktv, 1)}</span>` : ''}</div>`;
+    let gon = buoc !== 'KTV';
+    if (gon) html += `<details class="dm-chitiet"><summary>Xem chi tiết phần kỹ thuật viên đã làm (A, ${c.bCan / DM_B.length} bước lắp đặt, số nét đếm)</summary>`;
+    html += `<div class="d-flex flex-wrap gap-2 align-items-end mb-2"><label>Họ tên kỹ thuật viên<input type="text" class="form-control form-control-sm in-w180" data-dmp="ktv" value="${inEsc(p.ktv || '')}" placeholder="Nhập tên trước khi làm" ${suaKTV ? '' : 'disabled'}></label>${dmTenLucHtml(p, 'ktv')}</div>`;
     let lkAll = dmArr(p.lk);
     if (lkAll.length > 1) {
         html += `<div class="in-sec">LINH KIỆN IN LẦN NÀY <span class="opacity-75">(bỏ chọn linh kiện không chạy trên máy này)</span></div><div class="d-flex flex-wrap gap-3 mb-2">`;
         lkAll.forEach((lk, i) => {
-            html += `<label class="d-flex align-items-center gap-1 small"><input type="checkbox" data-dmact="boLk" data-v="${i}" ${(p.boLk || {})[i] ? '' : 'checked'} ${dis}> <b>${inEsc(lk.ma)}</b> ${inEsc(lk.ten || '')} (${dmArr(lk.buoc).length} bước)</label>`;
+            html += `<label class="d-flex align-items-center gap-1 small"><input type="checkbox" data-dmact="boLk" data-v="${i}" ${(p.boLk || {})[i] ? '' : 'checked'} ${suaKTV && !Object.keys(p.b || {}).length ? '' : 'disabled'}> <b>${inEsc(lk.ma)}</b> ${inEsc(lk.ten || '')} (${dmArr(lk.buoc).length} bước)</label>`;
         });
         html += `</div>`;
     }
-
-    // A. CHUẨN BỊ
-    html += `<div class="in-sec mt-2">A. CHUẨN BỊ <span class="opacity-75">(kỹ thuật viên / tổ trưởng đánh ✓ / ✗)</span></div>
-      <div class="row g-2 mb-2"><div class="col-lg-7">${DM_A.map((t, i) => `<div class="in-check">${dmCyc(id, `a/${i}`, c.a[i], ro)}<span>${i + 1}. ${t}</span></div>`).join('')}</div>
-      <div class="col-lg-5 d-flex flex-column gap-2">
-        <label>Kỹ thuật viên lắp đặt (họ tên)<input type="text" class="form-control form-control-sm" data-dmp="ktv" value="${inEsc(p.ktv || '')}" placeholder="Bắt buộc trước khi tick bước B" ${dis}></label>
-        <label>Tổ trưởng (họ tên)<input type="text" class="form-control form-control-sm" data-dmp="toTruong" value="${inEsc(p.toTruong || '')}" ${dis}></label>
-        <label>QC kiểm (họ tên)<input type="text" class="form-control form-control-sm" data-dmp="qcTen" value="${inEsc(p.qcTen || '')}" ${dis}></label>
-      </div></div>`;
+    html += `<div class="in-sec mt-2">A. CHUẨN BỊ</div>${DM_A.map((t, i) => `<div class="in-check">${dmCyc(id, `a/${i}`, c.a[i], !suaKTV || !c.ktvTen)}<span>${i + 1}. ${t}</span></div>`).join('')}`;
+    if (suaKTV && !c.ktvTen) html += `<div class="in-alert warn mt-1">Nhập họ tên kỹ thuật viên trước.</div>`;
     if (c.aNg) html += `<div class="in-alert mb-2">Chuẩn bị có mục ✗ – không lắp đặt cho đến khi xử lý xong.</div>`;
-
-    // B + đếm nét + C theo từng linh kiện
-    c.lks.forEach(({ i, lk, t }) => { html += dmRenderLk(id, p, c, i, lk, t, ro); });
-
-    // KẾT LUẬN
-    html += `<div class="in-sec mt-3">KẾT LUẬN</div>`;
-    if (ro) {
-        html += `<div class="alert alert-success py-2 mb-2 fw-bold">✅ ĐẠT – được chạy đại trà lúc ${inEsc(p.klLuc || '')}. Bộ phận in chưa có lệnh trên phần mềm sản xuất, phiếu này là căn cứ ghi nhận.</div>`;
-    } else if (!c.choKy) {
-        html += `<div class="small opacity-75 mb-2">Ký xác nhận mở khi: A đủ 5 mục ✓, B tick đủ mọi bước, số nét in đếm đúng deco, QC tick đủ "SP đầu có nét" và 5 SP đạt 5 mục ở mọi linh kiện.</div>`;
+    c.lks.forEach(({ i, lk, t }) => { html += dmRenderLkKTV(id, p, c, i, lk, t, suaKTV); });
+    if (buoc === 'KTV') {
+        html += `<div class="dm-chuyen"><button type="button" class="btn btn-sm ${c.xongKTV ? 'btn-3d-emerald' : 'btn-outline-secondary'} px-3" data-dmact="xongKTV" ${c.xongKTV ? '' : 'disabled'}>✅ KTV hoàn thành – chuyển Tổ trưởng đếm lại</button>
+          ${c.xongKTV ? '' : '<span class="small opacity-75">Mở khi: có tên KTV, A đủ 5 ✓, tick đủ mọi bước lắp đặt, số nét đếm khớp deco ở mọi linh kiện.</span>'}</div>`;
     }
-    html += `<div class="d-flex flex-wrap gap-3 align-items-center mb-2">`;
-    DM_KY.forEach(([k, nhan, truongTen]) => {
-        let s = (p.ky || {})[k];
-        if (s) html += `<span class="in-signed">✍️ ${nhan}: ${dmKyHtml(s)} ${ro ? '' : `<button type="button" class="in-mini" data-dmact="huyKy" data-v="${k}" title="Hủy chữ ký">✕</button>`}</span>`;
-        else {
-            let ok = c.choKy && String(p[truongTen] || '').trim();
-            let why = !c.choKy ? 'Chưa đủ điều kiện ký' : 'Nhập họ tên ở mục A trước';
-            html += `<button type="button" class="btn btn-sm ${ok ? 'btn-3d-emerald' : 'btn-outline-secondary'} px-2" data-dmact="ky" data-v="${k}" ${ok ? '' : `disabled title="${why}"`}>✍️ ${nhan} ký</button>`;
-        }
-    });
+    if (gon) html += `</details>`;
     html += `</div>`;
-    if (!ro) {
-        html += `<div class="in-panel mt-2"><div class="in-panel-h">✗ KHÔNG ĐẠT → dừng, làm lại từ bước B (lắp đặt)</div>
+
+    // ===== ② TỔ TRƯỞNG =====
+    let chan = dmChanMay(p);
+    let suaTT = buoc === 'TT' && !c.decoCu && !chan;
+    html += `<div class="dm-khoi ${buoc === 'TT' ? 'now' : buoc === 'KTV' ? 'wait' : 'locked'}"><div class="dm-khoi-h">② TỔ TRƯỞNG – đếm lại nét in độc lập ${buoc !== 'TT' && (p.ky || {}).toTruong ? `<span class="dm-khoa">🔒 Đã chuyển – ${dmKyHtml(p.ky.toTruong, 1)}</span>` : ''}</div>`;
+    if (buoc === 'KTV') html += `<div class="small opacity-75">Chờ kỹ thuật viên hoàn thành.</div>`;
+    else {
+        if (buoc === 'TT' && chan) html += `<div class="in-alert mb-2">⛔ ${inEsc(chan)}</div>`;
+        html += `<div class="d-flex flex-wrap gap-2 align-items-end mb-2"><label>Họ tên tổ trưởng<input type="text" class="form-control form-control-sm in-w180 ${c.ttTrung ? 'in-bad' : ''}" data-dmp="toTruong" value="${inEsc(p.toTruong || '')}" placeholder="Khác tên KTV" ${suaTT ? '' : 'disabled'}></label>
+            ${c.ttTrung ? '<span class="in-tag ng">Trùng tên KTV – phải là người khác</span>' : ''}${dmTenLucHtml(p, 'toTruong')}</div>
+          <div class="small opacity-75 mb-1">Tự đếm số nét in trên sản phẩm đầu của từng linh kiện. Số của KTV và số theo deco được ẩn để đếm độc lập.</div>
+          <table class="table table-bordered table-sm align-middle in-table mb-2" style="max-width:640px"><thead><tr><th class="text-start">Linh kiện</th><th>Tổ trưởng đếm</th><th>Kết quả</th>${buoc !== 'TT' ? '<th>KTV đếm</th><th>Deco</th>' : ''}</tr></thead><tbody>`;
+        c.lks.forEach(({ i, lk, t }) => {
+            html += `<tr><td class="text-start"><b>${inEsc(lk.ma)}</b> ${inEsc(lk.ten || '')}</td>
+              <td><input type="number" inputmode="numeric" min="0" class="form-control form-control-sm in-w80 mx-auto ${t.ttLech ? 'in-bad' : t.ttDung ? 'in-good' : ''}" data-dmp="demTT/${i}" value="${t.demTT == null ? '' : t.demTT}" ${suaTT && c.ttTen && !c.ttTrung ? '' : 'disabled'}></td>
+              <td>${t.ttDung ? '<span class="in-tag ok">KHỚP</span>' : t.ttLech ? '<span class="in-tag ng">KHÔNG KHỚP</span>' : '—'}</td>
+              ${buoc !== 'TT' ? `<td>${t.dem == null ? '' : t.dem}</td><td>${t.net}</td>` : ''}</tr>`;
+        });
+        html += `</tbody></table>`;
+        if (buoc === 'TT' && c.ttLech) html += `<div class="in-alert mb-2">⛔ Số tổ trưởng đếm KHÔNG khớp deco ở linh kiện tô đỏ. Kiểm tra lại sản phẩm; nếu thiếu nét thật thì bấm "Không đạt" để trả KTV làm lại.</div>`;
+        if (buoc === 'TT') html += `<div class="dm-chuyen"><button type="button" class="btn btn-sm ${c.xongTT ? 'btn-3d-emerald' : 'btn-outline-secondary'} px-3" data-dmact="xongTT" ${c.xongTT && !chan ? '' : 'disabled'}>✅ Tổ trưởng xác nhận – chuyển QC</button>
+            ${c.xongTT ? '' : '<span class="small opacity-75">Mở khi: có tên tổ trưởng (khác KTV) và số đếm khớp ở mọi linh kiện.</span>'}</div>`;
+    }
+    html += `</div>`;
+
+    // ===== ③ QC =====
+    let suaQC = buoc === 'QC' && !c.decoCu && !chan;
+    html += `<div class="dm-khoi ${buoc === 'QC' ? 'now' : buoc === 'DAT' ? 'locked' : 'wait'}"><div class="dm-khoi-h">③ QC – kiểm 5 sản phẩm đầu & kết luận ${ro && (p.ky || {}).qc ? `<span class="dm-khoa">🔒 ${dmKyHtml(p.ky.qc, 1)}</span>` : ''}</div>`;
+    if (buoc === 'KTV' || buoc === 'TT') html += `<div class="small opacity-75">Chờ ${buoc === 'KTV' ? 'kỹ thuật viên và tổ trưởng' : 'tổ trưởng'} hoàn thành.</div>`;
+    else {
+        if (buoc === 'QC' && chan) html += `<div class="in-alert mb-2">⛔ ${inEsc(chan)}</div>`;
+        html += `<div class="d-flex flex-wrap gap-2 align-items-end mb-2"><label>Họ tên QC<input type="text" class="form-control form-control-sm in-w180 ${c.qcTrung ? 'in-bad' : ''}" data-dmp="qcTen" value="${inEsc(p.qcTen || '')}" placeholder="Khác KTV và tổ trưởng" ${suaQC ? '' : 'disabled'}></label>
+            ${c.qcTrung ? '<span class="in-tag ng">Trùng tên KTV / tổ trưởng – phải là người khác</span>' : ''}${dmTenLucHtml(p, 'qcTen')}</div>`;
+        let moC = suaQC && c.qcTen && !c.qcTrung;
+        c.lks.forEach(({ i, lk, t }) => { html += dmRenderLkQC(id, p, i, lk, t, !moC); });
+        if (buoc === 'QC') html += `<div class="dm-chuyen"><button type="button" class="btn btn-sm ${c.xongQC ? 'btn-3d-emerald' : 'btn-outline-secondary'} px-3" data-dmact="xongQC" ${c.xongQC && !chan ? '' : 'disabled'}>✅ QC kết luận ĐẠT – cho chạy đại trà</button>
+            ${c.xongQC ? '' : '<span class="small opacity-75">Mở khi: có tên QC (khác 2 người trước), tick đủ "SP đầu có nét" và 5 SP đạt 5 mục ở mọi linh kiện.</span>'}</div>`;
+        if (ro) html += `<div class="alert alert-success py-2 mt-2 mb-0 fw-bold">✅ ĐẠT – được chạy đại trà lúc ${inEsc(p.klLuc || '')}. Bộ phận in chưa có lệnh trên phần mềm sản xuất, phiếu này là căn cứ ghi nhận.</div>`;
+    }
+    html += `</div>`;
+
+    // ===== KHÔNG ĐẠT (tổ trưởng hoặc QC) =====
+    if (buoc === 'TT' || buoc === 'QC') {
+        html += `<div class="in-panel mt-2"><div class="in-panel-h">✗ KHÔNG ĐẠT → dừng, trả kỹ thuật viên làm lại từ bước lắp đặt</div>
             <div class="d-flex flex-wrap gap-2 align-items-end">
-              <label class="flex-grow-1">Lý do không đạt / bước bị sót<input type="text" class="form-control form-control-sm" data-dmp="ngLyDo" value="${inEsc(p.ngLyDo || '')}" placeholder="VD: thiếu bước 7 đuôi đèn trái – chưa lắp bản in"></label>
-              <button type="button" class="btn btn-sm btn-3d-ruby px-3" data-dmact="khongDat">✗ Không đạt – làm lại</button>
+              <label class="flex-grow-1">Lý do không đạt / bước bị sót<input type="text" class="form-control form-control-sm" data-dmp="ngLyDo" value="${inEsc(p.ngLyDo || '')}" placeholder="VD: thiếu nét đuôi đèn trái – chưa lắp bản in"></label>
+              <button type="button" class="btn btn-sm btn-3d-ruby px-3" data-dmact="khongDat" ${chan ? 'disabled' : ''}>✗ Không đạt – trả KTV</button>
             </div>
-            <div class="small opacity-75 mt-1">Phần B, đếm nét, C và chữ ký được xóa để làm lại; lần không đạt được lưu vào lịch sử phiếu.</div></div>`;
+            <div class="small opacity-75 mt-1">Phần lắp đặt, số đếm, phần QC được xóa; phiếu quay về chờ kỹ thuật viên. Lần không đạt được lưu trong lịch sử phiếu.</div></div>`;
     }
     html += `</div>`;
     return html;
 }
 
-function dmRenderLk(id, p, c, i, lk, t, ro) {
-    let dis = ro ? 'disabled' : '';
-    let khoaB = !c.aOk || !String(p.ktv || '').trim();
+function dmRenderLkKTV(id, p, c, i, lk, t, sua) {
+    let khoaB = !sua || !c.aOk || !c.ktvTen;
     let pre = `b/${i}`;
     let html = `<div class="in-panel mt-3">
       <div class="in-panel-h">🧩 ${inEsc(lk.ma)} – ${inEsc(lk.ten || '')} <span class="opacity-75 fw-normal">${inEsc(lk.ten_goc || '')}</span></div>
       <div class="small opacity-75 mb-2">Phôi đầu vào: <b>${inEsc(lk.phoi || '-')}</b> · Màu nền: ${inEsc(lk.mau_nen || '-')} · Vật liệu: ${inEsc(lk.vat_lieu || '-')}</div>
-      <div class="in-sec">B. LẮP ĐẶT <span class="opacity-75">(kỹ thuật viên tick từng bước: ${t.bXong}/${t.bCan})</span></div>
-      ${khoaB && !ro ? `<div class="in-alert warn mb-2">${!c.aOk ? 'Hoàn thành mục A (đủ 5 ✓) trước khi lắp đặt.' : 'Nhập họ tên kỹ thuật viên ở mục A trước khi tick.'}</div>` : ''}
+      <div class="in-sec">B. LẮP ĐẶT <span class="opacity-75">(tick từng bước: ${t.bXong}/${t.bCan})</span></div>
+      ${sua && !c.aOk ? '<div class="in-alert warn mb-2">Hoàn thành mục A (đủ 5 ✓) trước khi lắp đặt.</div>' : ''}
       <div class="table-responsive"><table class="table table-bordered table-sm align-middle in-table dm-buoc mb-2"><thead><tr>
         <th>STT</th><th class="text-start">Vị trí in</th><th class="text-start">Màu</th><th>Mã mực</th><th>Máy / bản (deco)</th><th>Bản in</th>
         ${DM_B.map(([, n]) => `<th>${n}</th>`).join('')}<th>Mã jig</th><th class="text-start">Ghi chú deco</th></tr></thead><tbody>`;
@@ -347,45 +457,45 @@ function dmRenderLk(id, p, c, i, lk, t, ro) {
         else {
             DM_B.forEach(([k, n]) => {
                 let s = bv[k];
-                html += `<td>${s && s.at ? `<button type="button" class="in-cyc ok dm-tick" data-dmact="tick" data-v="${pre}/${j}/${k}" title="${inEsc(n)} – bấm để bỏ" ${dis}>✓</button><div class="dm-who">${dmKyHtml(s)}</div>`
-                    : `<button type="button" class="in-cyc dm-tick" data-dmact="tick" data-v="${pre}/${j}/${k}" title="${inEsc(n)}" ${ro || khoaB ? 'disabled' : ''}>·</button>`}</td>`;
+                html += `<td>${s && s.at ? `<button type="button" class="in-cyc ok dm-tick" data-dmact="tick" data-v="${pre}/${j}/${k}" title="${inEsc(n)} – bấm để bỏ" ${sua ? '' : 'disabled'}>✓</button><div class="dm-who">${dmKyHtml(s)}</div>`
+                    : `<button type="button" class="in-cyc dm-tick" data-dmact="tick" data-v="${pre}/${j}/${k}" title="${inEsc(n)}" ${khoaB ? 'disabled' : ''}>·</button>`}</td>`;
             });
-            html += `<td><input type="text" class="form-control form-control-sm in-w80" data-dmp="${pre}/${j}/jigMa" value="${inEsc(bv.jigMa || '')}" placeholder="ghi mã" ${dis}></td>`;
+            html += `<td><input type="text" class="form-control form-control-sm in-w80" data-dmp="${pre}/${j}/jigMa" value="${inEsc(bv.jigMa || '')}" placeholder="ghi mã" ${sua ? '' : 'disabled'}></td>`;
         }
         html += `<td class="text-start small">${inEsc(b.ghi_chu || '')}${dmLa10k(b) ? '<div class="text-warning fw-bold">Bản in mã ngày / mã UV: thay sau ~10.000 cái</div>' : ''}</td></tr>`;
     });
     html += `</tbody></table></div>`;
-
-    // Đếm nét in
-    let khoaDem = !t.bDu;
-    html += `<div class="in-sec mt-2">ĐẾM NÉT IN TRÊN SẢN PHẨM ĐẦU</div>
-      <div class="d-flex flex-wrap gap-3 align-items-center mb-2">
+    let khoaDem = !sua || !t.bDu;
+    html += `<div class="in-sec mt-2">ĐẾM NÉT IN TRÊN SẢN PHẨM ĐẦU (KTV)</div>
+      <div class="d-flex flex-wrap gap-3 align-items-center mb-1">
         <span>Theo deco: <b class="fs-6">${t.net}</b> nét${t.tinh.some(([, b]) => dmLuot(b) > 1) ? ' <span class="small opacity-75">(đã tính số lượt in)</span>' : ''}</span>
-        <label class="d-flex align-items-center gap-2">Đếm được <input type="number" inputmode="numeric" min="0" class="form-control form-control-sm in-w80 ${t.demLech ? 'in-bad' : t.demDung ? 'in-good' : ''}" data-dmp="dem/${i}" value="${t.dem == null ? '' : t.dem}" ${ro || khoaDem ? 'disabled' : ''}></label>
-        ${khoaDem && !ro ? '<span class="small opacity-75">Mở sau khi tick đủ bước B.</span>' : ''}
+        <label class="d-flex align-items-center gap-2">KTV đếm được <input type="number" inputmode="numeric" min="0" class="form-control form-control-sm in-w80 ${t.demLech ? 'in-bad' : t.demDung ? 'in-good' : ''}" data-dmp="dem/${i}" value="${t.dem == null ? '' : t.dem}" ${khoaDem ? 'disabled' : ''}></label>
+        ${sua && !t.bDu ? '<span class="small opacity-75">Mở sau khi tick đủ bước B.</span>' : ''}
         ${t.demDung ? '<span class="in-tag ok">KHỚP DECO</span>' : ''}
       </div>
-      ${t.demLech ? `<div class="in-alert mb-2">⛔ KHÓA: đếm ${t.dem} nét, deco có ${t.net} nét (lệch ${t.dem - t.net > 0 ? '+' : ''}${t.dem - t.net}). Tìm bước bị sót hoặc in thừa, sửa xong đếm lại.</div>` : ''}`;
+      ${t.demLech ? `<div class="in-alert mb-1">⛔ KHÓA: đếm ${t.dem} nét, deco có ${t.net} nét (lệch ${t.dem - t.net > 0 ? '+' : ''}${t.dem - t.net}). Tìm bước bị sót hoặc in thừa, sửa xong đếm lại.</div>` : ''}
+    </div>`;
+    return html;
+}
 
-    // C. QC
-    let khoaC = !c.choQC;
-    html += `<div class="in-sec mt-2">C. QC KIỂM 5 SẢN PHẨM ĐẦU</div>
-      ${khoaC && !ro ? '<div class="small opacity-75 mb-1">Mở khi A đạt, B tick đủ và số nét khớp ở mọi linh kiện.</div>' : ''}
+function dmRenderLkQC(id, p, i, lk, t, khoa) {
+    return `<div class="in-panel mt-2">
+      <div class="in-panel-h">🧩 ${inEsc(lk.ma)} – ${inEsc(lk.ten || '')}</div>
       <div class="row g-3"><div class="col-xl-5">
         <div class="small fw-bold mb-1">SP đầu CÓ nét in này (${t.coXong}/${t.tinh.length})</div>
         ${t.tinh.map(([j, b]) => {
             let on = ((((p.c || {})[i] || {}).co) || {})[j];
-            return `<div class="in-check"><button type="button" class="in-cyc ${on ? 'ok' : ''}" data-dmact="co" data-v="c/${i}/co/${j}" ${ro || khoaC ? 'disabled' : ''}>${on ? '✓' : '·'}</button><span>${inEsc(b.stt)}. ${inEsc(b.vi_tri || '')} – ${inEsc(b.mau || '')}${dmLuot(b) > 1 ? ` (${dmLuot(b)} lượt)` : ''}</span></div>`;
+            return `<div class="in-check"><button type="button" class="in-cyc ${on ? 'ok' : ''}" data-dmact="co" data-v="c/${i}/co/${j}" ${khoa ? 'disabled' : ''}>${on ? '✓' : '·'}</button><span>${inEsc(b.stt)}. ${inEsc(b.vi_tri || '')} – ${inEsc(b.mau || '')}${dmLuot(b) > 1 ? ` (${dmLuot(b)} lượt)` : ''}</span></div>`;
         }).join('')}
       </div><div class="col-xl-7">
         <table class="table table-bordered table-sm align-middle text-center in-table mb-1"><thead><tr><th class="text-start">Hạng mục</th><th>SP 1</th><th>SP 2</th><th>SP 3</th><th>SP 4</th><th>SP 5</th></tr></thead><tbody>
-        ${DM_C.map((n, ci) => `<tr><td class="text-start">${ci + 1}. ${n}</td>${[0, 1, 2, 3, 4].map(si => dmTdCyc(id, p, `c/${i}/kq/${ci}/${si}`, ro || khoaC)).join('')}</tr>`).join('')}
+        ${DM_C.map((n, ci) => `<tr><td class="text-start">${ci + 1}. ${n}</td>${[0, 1, 2, 3, 4].map(si => dmTdCyc(id, p, `c/${i}/kq/${ci}/${si}`, khoa)).join('')}</tr>`).join('')}
         </tbody></table>
-        ${!ro && !khoaC ? `<button type="button" class="in-mini" data-dmact="cAllOk" data-v="${i}">✓ Đánh đạt cả 5 SP</button>` : ''}
+        ${!khoa ? `<button type="button" class="in-mini" data-dmact="cAllOk" data-v="${i}">✓ Đánh đạt cả 5 SP</button>` : ''}
       </div></div>
     </div>`;
-    return html;
 }
+
 function dmCyc(id, rel, val, ro) {
     let cls = val === 'OK' ? 'ok' : val === 'NG' ? 'ng' : '';
     return `<button type="button" class="in-cyc ${cls}" data-dmact="cyc" data-v="${rel}" title="Bấm để đổi: trống → ✓ → ✗" ${ro ? 'disabled' : ''}>${val === 'OK' ? '✓' : val === 'NG' ? '✗' : '·'}</button>`;
@@ -414,10 +524,10 @@ function dmRenderLichSu() {
     let dat = rows.filter(r => r.p.kl === 'DAT').length, lai = rows.reduce((s, r) => s + Object.keys(r.p.lan || {}).length, 0);
     html += `<div class="small mb-2">${rows.length} phiếu · <b class="text-success">${dat} đạt</b> · ${rows.length - dat} chưa xong · ${lai} lần không đạt phải làm lại</div>
       <div class="table-responsive"><table class="table table-bordered table-sm align-middle in-table"><thead><tr>
-      <th>Ngày</th><th>Giờ</th><th>Ca</th><th>Mã hàng</th><th class="text-start">Tên SP</th><th>Deco</th><th>Máy</th><th>Nét (deco/đếm)</th><th>Làm lại</th><th>Kết quả</th><th class="text-start">Người ký</th><th></th></tr></thead><tbody>`;
+      <th>Ngày</th><th>Giờ</th><th>Ca</th><th>Mã hàng</th><th class="text-start">Tên SP</th><th>Deco</th><th>Máy</th><th>Nét deco / KTV / TT</th><th>Làm lại</th><th>Kết quả</th><th class="text-start">Người ký</th><th></th></tr></thead><tbody>`;
     rows.forEach(r => {
         let p = r.p, c = dmCalc(p);
-        let net = c.lks.map(x => `${x.t.net}/${x.t.dem == null ? '–' : x.t.dem}`).join(', ');
+        let net = c.lks.map(x => `${x.t.net}/${x.t.dem == null ? '–' : x.t.dem}/${x.t.demTT == null ? '–' : x.t.demTT}`).join(', ');
         let ky = DM_KY.map(([k, n]) => (p.ky || {})[k] ? `${n}: ${inEsc((p.ky[k].ten || p.ky[k].acc || ''))}` : '').filter(Boolean).join('<br>');
         html += `<tr><td>${inEsc(r.d)}</td><td>${inEsc(p.taoLuc || '')}</td><td>${dmCaTen(p.ca)}</td><td class="fw-bold">${inEsc(p.ma)}</td>
           <td class="text-start small">${inEsc(p.ten || '')}</td><td>${inEsc(p.phienBan || '')}</td><td>${inEsc(p.may || '')}</td><td>${net}</td>
@@ -443,13 +553,13 @@ function dmXuatExcelLs() {
     if (typeof XLSX === 'undefined' || !dmLs.rows) return;
     let q = dmLs.tim.trim().toLowerCase();
     let rows = dmLs.rows.filter(r => !q || String(r.p.ma).toLowerCase().includes(q) || String(r.p.may || '').toLowerCase() === q || String(r.p.ten || '').toLowerCase().includes(q));
-    let s1 = [['Ngày', 'Giờ lập', 'Ca', 'Mã hàng', 'Tên SP', 'Deco bản', 'Máy in', 'Lệnh SX', 'Linh kiện', 'Nét theo deco', 'Nét đếm được', 'Số lần không đạt', 'Lý do không đạt', 'Kết quả', 'Giờ đạt', 'KTV ký', 'Tổ trưởng ký', 'QC ký']];
+    let s1 = [['Ngày', 'Giờ lập', 'Ca', 'Mã hàng', 'Tên SP', 'Deco bản', 'Máy in', 'Lệnh SX', 'Linh kiện', 'Nét theo deco', 'KTV đếm', 'Tổ trưởng đếm', 'Số lần không đạt', 'Lý do không đạt', 'Kết quả', 'Giờ đạt', 'KTV chuyển', 'KTV máy', 'Tổ trưởng chuyển', 'Tổ trưởng máy', 'Tổ trưởng làm trong', 'QC kết luận', 'QC máy', 'QC làm trong']];
     let s2 = [['Ngày', 'Mã hàng', 'Máy in', 'Linh kiện', 'STT', 'Vị trí', 'Vị trí (gốc)', 'Màu', 'Màu (gốc)', 'Mã mực', 'Số lượt', 'Bản in đã lắp', 'Mực đúng mã', 'Jig đúng', 'Mã jig', 'SP đầu có nét']];
     rows.forEach(({ d, p }) => {
-        let c = dmCalc(p), kyT = k => (p.ky || {})[k] ? `${p.ky[k].ten || p.ky[k].acc} ${p.ky[k].at}` : '';
+        let c = dmCalc(p), K = p.ky || {}, kyT = k => K[k] ? `${K[k].ten || K[k].acc} ${K[k].at}` : '', may = k => (K[k] || {}).tb || '';
         s1.push([d, p.taoLuc || '', p.ca === 'DEM' ? 'Đêm' : 'Ngày', p.ma, p.ten || '', p.phienBan || '', p.may || '', p.lenh || '',
-            c.lks.map(x => x.lk.ma).join(', '), c.lks.map(x => x.t.net).join(', '), c.lks.map(x => x.t.dem == null ? '' : x.t.dem).join(', '),
-            Object.keys(p.lan || {}).length, Object.values(p.lan || {}).map(l => l.lyDo).join(' | '), c.st, p.klLuc || '', kyT('ktv'), kyT('toTruong'), kyT('qc')]);
+            c.lks.map(x => x.lk.ma).join(', '), c.lks.map(x => x.t.net).join(', '), c.lks.map(x => x.t.dem == null ? '' : x.t.dem).join(', '), c.lks.map(x => x.t.demTT == null ? '' : x.t.demTT).join(', '),
+            Object.keys(p.lan || {}).length, Object.values(p.lan || {}).map(l => `${l.boi || l.by || ''}: ${l.lyDo}`).join(' | '), c.st, p.klLuc || '', kyT('ktv'), may('ktv'), kyT('toTruong'), may('toTruong'), dmPhutGiua((K.ktv || {}).ts, (K.toTruong || {}).ts), kyT('qc'), may('qc'), dmPhutGiua((K.toTruong || {}).ts, (K.qc || {}).ts)]);
         c.lks.forEach(({ i, lk, t }) => t.buoc.forEach((b, j) => {
             let bv = ((p.b || {})[i] || {})[j] || {}, tk = k => bv[k] && bv[k].at ? `${bv[k].ten} ${bv[k].at}` : '';
             s2.push([d, p.ma, p.may || '', lk.ma, b.stt, b.vi_tri || '', b.vi_tri_goc || '', b.mau || '', b.mau_goc || '', b.ma_muc || '', dmLuot(b),
@@ -588,6 +698,18 @@ function dmTaoPhieu() {
     dmMo = id; dmMaMoi = ''; dmMayMoi = '';
 }
 
+// Trường nào được sửa ở bước nào (người đã chuyển bước thì phần của mình bị khóa)
+function dmDuocSua(p, rel) {
+    let b = dmBuoc(p);
+    if (b === 'DAT' || dmDecoCu(p)) return false;
+    if ((b === 'TT' || b === 'QC') && !/^lenh$/.test(rel) && dmChanMay(p)) return false;
+    if (/^lenh$/.test(rel)) return true;
+    if (/^(ktv|may|a|b|dem|boLk)(\/|$)/.test(rel)) return b === 'KTV';
+    if (/^(toTruong|demTT)(\/|$)/.test(rel)) return b === 'TT';
+    if (/^(qcTen|c)(\/|$)/.test(rel)) return b === 'QC';
+    if (/^ngLyDo$/.test(rel)) return b === 'TT' || b === 'QC';
+    return false;
+}
 function dmOnClick(e) {
     let b = e.target.closest('[data-dmact]');
     let root = document.getElementById('inRoot');
@@ -595,7 +717,8 @@ function dmOnClick(e) {
     if (b.tagName === 'INPUT') return;   // checkbox linh kiện: xử lý ở sự kiện change
     let act = b.dataset.dmact, v = b.dataset.v;
     if (!checkAuthOrAlert()) return;
-    let p = dmMo ? dmPhieu[dmMo] : null, ro = p && p.kl === 'DAT';
+    let p = dmMo ? dmPhieu[dmMo] : null;
+    const khong = msg => { inToast(msg, true); };
     switch (act) {
         case 'xem': dmXem = v; dmMo = null; break;
         case 'tao': dmTaoPhieu(); break;
@@ -611,56 +734,74 @@ function dmOnClick(e) {
         case 'lsTai': dmTaiLichSu(); return;
         case 'lsExcel': dmXuatExcelLs(); return;
         case 'cyc': {
-            if (!p || ro) return;
-            let cur = dmGet(p, v), nv = !cur ? 'OK' : cur === 'OK' ? 'NG' : null;
-            dmHuyKyNeuCo(dmMo, v); dmWrite(dmMo, v, nv); break;
+            if (!p || !dmDuocSua(p, v)) return khong(dmChanMay(p) || 'Phần này đã khóa hoặc chưa tới lượt.');
+            if (/^a\//.test(v) && !String(p.ktv || '').trim()) return khong('Nhập họ tên kỹ thuật viên trước.');
+            if (/^c\//.test(v) && (!String(p.qcTen || '').trim() || dmCalc(p).qcTrung)) return khong('Nhập họ tên QC (khác KTV và tổ trưởng) trước.');
+            let cur = dmGet(p, v);
+            dmWrite(dmMo, v, !cur ? 'OK' : cur === 'OK' ? 'NG' : null); break;
         }
         case 'tick': {
-            if (!p || ro) return;
+            if (!p || !dmDuocSua(p, v)) return khong('Phần lắp đặt đã khóa hoặc chưa tới lượt.');
             let cur = dmGet(p, v);
-            if (cur && cur.at) { dmHuyKyNeuCo(dmMo, v); dmWrite(dmMo, v, null); break; }
-            if (!dmCalc(p).aOk) { inToast('Hoàn thành mục A trước khi lắp đặt.', true); return; }
-            if (!String(p.ktv || '').trim()) { inToast('Nhập họ tên kỹ thuật viên ở mục A trước khi tick.', true); return; }
-            dmHuyKyNeuCo(dmMo, v); dmWrite(dmMo, v, dmStamp(p.ktv.trim())); break;
+            if (cur && cur.at) { dmWrite(dmMo, v, null); break; }
+            if (!dmCalc(p).aOk) return khong('Hoàn thành mục A trước khi lắp đặt.');
+            if (!String(p.ktv || '').trim()) return khong('Nhập họ tên kỹ thuật viên trước khi tick.');
+            dmWrite(dmMo, v, dmStamp(p.ktv.trim())); break;
         }
         case 'co': {
-            if (!p || ro) return;
-            dmHuyKyNeuCo(dmMo, v); dmWrite(dmMo, v, dmGet(p, v) ? null : true); break;
+            if (!p || !dmDuocSua(p, v)) return khong(dmChanMay(p) || 'Phần QC đã khóa hoặc chưa tới lượt.');
+            if (!String(p.qcTen || '').trim() || dmCalc(p).qcTrung) return khong('Nhập họ tên QC (khác KTV và tổ trưởng) trước.');
+            dmWrite(dmMo, v, dmGet(p, v) ? null : true); break;
         }
         case 'cAllOk': {
-            if (!p || ro) return;
+            if (!p || !dmDuocSua(p, `c/${v}`)) return;
             let kq = {}; DM_C.forEach((_, ci) => { kq[ci] = { 0: 'OK', 1: 'OK', 2: 'OK', 3: 'OK', 4: 'OK' }; });
-            dmHuyKyNeuCo(dmMo, `c/${v}/kq`); dmWrite(dmMo, `c/${v}/kq`, kq); break;
+            dmWrite(dmMo, `c/${v}/kq`, kq); break;
         }
-        case 'ky': {
-            if (!p || ro) return;
-            let c = dmCalc(p); if (!c.choKy) { inToast('Chưa đủ điều kiện ký.', true); return; }
-            let [, , truong] = DM_KY.find(([k]) => k === v) || [];
-            let ten = String(p[truong] || '').trim(); if (!ten) { inToast('Nhập họ tên ở mục A trước khi ký.', true); return; }
-            dmWrite(dmMo, `ky/${v}`, dmStamp(ten));
-            if (DM_KY.every(([k]) => (p.ky || {})[k])) {
-                dmWrite(dmMo, 'kl', 'DAT'); dmWrite(dmMo, 'klLuc', inNowHM());
-                inToast('✅ Đủ 3 chữ ký – ĐẠT, được chạy đại trà.');
-            }
-            break;
+        case 'xongKTV': {
+            if (!p || dmBuoc(p) !== 'KTV') return;
+            let c = dmCalc(p); if (!c.xongKTV) return khong('Chưa đủ điều kiện hoàn thành.');
+            if (!confirm(`${c.ktvTen}: xác nhận đã lắp đặt đủ ${c.bCan / DM_B.length} bước và đếm nét khớp deco?\nSau khi chuyển, phần của KTV bị khóa.`)) return;
+            dmWrite(dmMo, 'ky/ktv', dmStamp(c.ktvTen)); dmWrite(dmMo, 'buoc', 'TT');
+            inToast('➜ Đã chuyển – chờ TỔ TRƯỞNG đếm lại nét in.'); break;
         }
-        case 'huyKy': if (p && !ro && confirm('Hủy chữ ký này?')) { dmWrite(dmMo, `ky/${v}`, null); dmWrite(dmMo, 'kl', null); } break;
+        case 'xongTT': {
+            if (!p || dmBuoc(p) !== 'TT') return;
+            if (dmChanMay(p)) return khong(dmChanMay(p));
+            let c = dmCalc(p); if (!c.xongTT) return khong('Chưa đủ điều kiện xác nhận.');
+            if (!confirm(`${c.ttTen}: xác nhận đã tự đếm lại và khớp deco?\nSau khi chuyển, phần của tổ trưởng bị khóa.`)) return;
+            dmWrite(dmMo, 'ky/toTruong', dmStamp(c.ttTen)); dmWrite(dmMo, 'buoc', 'QC');
+            inToast('➜ Đã chuyển – chờ QC kiểm 5 sản phẩm đầu.'); break;
+        }
+        case 'xongQC': {
+            if (!p || dmBuoc(p) !== 'QC') return;
+            if (dmChanMay(p)) return khong(dmChanMay(p));
+            let c = dmCalc(p); if (!c.xongQC) return khong('Chưa đủ điều kiện kết luận.');
+            if (!confirm(`${c.qcTen}: kết luận ĐẠT – cho chạy đại trà?`)) return;
+            dmWrite(dmMo, 'ky/qc', dmStamp(c.qcTen)); dmWrite(dmMo, 'kl', 'DAT'); dmWrite(dmMo, 'klLuc', dmGio()); dmWrite(dmMo, 'buoc', 'DAT');
+            inToast('✅ ĐẠT – được chạy đại trà.'); break;
+        }
         case 'khongDat': {
-            if (!p || ro) return;
+            if (!p) return;
+            let bc = dmBuoc(p); if (bc !== 'TT' && bc !== 'QC') return;
+            if (dmChanMay(p)) return khong(dmChanMay(p));
             let ly = String(p.ngLyDo || '').trim();
-            if (!ly) { inToast('Ghi lý do không đạt / bước bị sót trước.', true); return; }
-            if (!confirm('Xác nhận KHÔNG ĐẠT: dừng máy, xóa phần B, đếm nét, C và chữ ký để làm lại từ bước lắp đặt?')) return;
+            if (!ly) return khong('Ghi lý do không đạt / bước bị sót trước.');
+            let nguoi = bc === 'TT' ? String(p.toTruong || '').trim() : String(p.qcTen || '').trim();
+            if (!nguoi) return khong(`Nhập họ tên ${bc === 'TT' ? 'tổ trưởng' : 'QC'} trước.`);
+            if (!confirm('Xác nhận KHÔNG ĐẠT: dừng máy, trả kỹ thuật viên làm lại từ bước lắp đặt?')) return;
             let n = Object.keys(p.lan || {}).length + 1;
-            dmWrite(dmMo, `lan/${n}`, { lyDo: ly, by: inUser(), at: inNowHM(), b: p.b || null, dem: p.dem || null, c: p.c || null });
-            ['b', 'dem', 'c', 'ky', 'kl', 'ngLyDo'].forEach(k => dmWrite(dmMo, k, null));
-            inToast(`Đã ghi KHÔNG ĐẠT lần ${n}. Làm lại từ bước B (lắp đặt).`, true);
+            dmWrite(dmMo, `lan/${n}`, { lyDo: ly, buoc: bc, boi: nguoi, acc: inUser(), at: dmGio(), ts: Date.now(), dev: dmThietBi().id, tb: dmThietBi().ten, ktv: p.ktv || '', ky: p.ky || null, b: p.b || null, dem: p.dem || null, demTT: p.demTT || null, c: p.c || null });
+            ['b', 'dem', 'demTT', 'demLuc', 'demTTLuc', 'c', 'ky', 'kl', 'ngLyDo'].forEach(k => dmWrite(dmMo, k, null));
+            dmWrite(dmMo, 'buoc', 'KTV'); dmWrite(dmMo, 'lamLaiTs', Date.now());
+            inToast(`Đã ghi KHÔNG ĐẠT lần ${n} – phiếu quay về chờ KTV lắp đặt lại.`, true);
             break;
         }
         case 'cxnLoc': dmCxnLoc = v; break;
         case 'cxnXong': {
             let inp = document.querySelector(`[data-dmcxn="${CSS.escape(v)}"]`);
             let tl = inp ? inp.value.trim() : '';
-            if (!tl) { inToast('Ghi câu trả lời của kỹ thuật trước khi đánh dấu đã xử lý.', true); return; }
+            if (!tl) return khong('Ghi câu trả lời của kỹ thuật trước khi đánh dấu đã xử lý.');
             db.ref(`${DM_DECO}/cxn/${v}`).update({ traLoi: tl, trang_thai: 'da_xu_ly', xuLyBoi: inUser(), xuLyLuc: `${getTodayISO()} ${inNowHM()}` });
             break;
         }
@@ -676,18 +817,25 @@ function dmOnChange(e) {
     if (!root || !root.contains(el)) return;
     if (el.id === 'dmFile') { let f = el.files && el.files[0]; el.value = ''; dmNapFile(f); return; }
     if (el.dataset.dmact === 'boLk') {
-        if (!dmMo || !dmPhieu[dmMo] || !checkAuthOrAlert()) return;
+        let p = dmMo && dmPhieu[dmMo];
+        if (!p || !checkAuthOrAlert()) return;
         let rel = `boLk/${el.dataset.v}`;
-        dmHuyKyNeuCo(dmMo, rel); dmWrite(dmMo, rel, el.checked ? null : true); renderTabIn(); return;
+        if (!dmDuocSua(p, rel)) { renderTabIn(); return; }
+        dmWrite(dmMo, rel, el.checked ? null : true); renderTabIn(); return;
     }
     if (el.dataset.dmcxn) { db.ref(`${DM_DECO}/cxn/${el.dataset.dmcxn}/traLoi`).set(el.value.trim() || null); return; }
     let rel = el.dataset.dmp;
     if (rel && dmMo && dmPhieu[dmMo]) {
         if (!checkAuthOrAlert()) return;
+        let p = dmPhieu[dmMo];
+        if (!dmDuocSua(p, rel)) { inToast(dmChanMay(p) || 'Phần này đã khóa hoặc chưa tới lượt.', true); renderTabIn(); return; }
         let val = el.value.trim();
-        if (/^dem\//.test(rel)) val = dmNum(val);
-        if (dmGet(dmPhieu[dmMo], rel) === (val === '' ? undefined : val)) return;
-        dmHuyKyNeuCo(dmMo, rel); dmWrite(dmMo, rel, val === null ? null : val);
+        if (/^(dem|demTT)\//.test(rel)) val = dmNum(val);
+        if (dmGet(p, rel) === (val === '' ? undefined : val)) return;
+        dmWrite(dmMo, rel, val === null ? null : val);
+        if (['ktv', 'toTruong', 'qcTen'].includes(rel)) dmWrite(dmMo, `tenLuc/${rel}`, val ? dmStamp(val) : null);
+        let md = /^(dem|demTT)\/(\d+)$/.exec(rel);
+        if (md) dmWrite(dmMo, `${md[1]}Luc/${md[2]}`, val == null ? null : dmStamp(md[1] === 'dem' ? p.ktv : p.toTruong));
         dmVeSau(); return;
     }
     let f = el.dataset.dmf;
@@ -697,6 +845,7 @@ function dmOnChange(e) {
         dmVeSau();
     }
 }
+
 // Vẽ lại hơi trễ: để cú bấm nút ngay sau khi rời ô nhập vẫn ăn (không bị mất vì nút bị vẽ lại)
 function dmVeSau() { clearTimeout(dmVeSau._t); dmVeSau._t = setTimeout(renderTabIn, 250); }
 function dmOnInput(e) {
