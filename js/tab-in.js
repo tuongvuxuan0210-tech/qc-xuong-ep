@@ -191,6 +191,7 @@ function inSubscribe() {
 function inStop() {
     if (inListenerPath && typeof db !== 'undefined' && db) db.ref(inListenerPath).off();
     inListenerPath = null; inData = {}; inStarted = false;
+    if (typeof dmStop === 'function') dmStop();
     let root = document.getElementById('inRoot'); if (root) root.innerHTML = '';
 }
 function onInDateShiftChange() { inSubscribe(); }
@@ -199,10 +200,13 @@ function onInDateShiftChange() { inSubscribe(); }
 function renderTabIn() {
     let root = document.getElementById('inRoot');
     if (!root || !isEditMode) return;
-    let ae = document.activeElement, focusP = (ae && root.contains(ae)) ? ae.getAttribute('data-p') : null;
+    let ae = document.activeElement, focusP = null;
+    if (ae && root.contains(ae)) ['data-p', 'data-dmp', 'data-dmf', 'data-dmcxn'].some(a => { let v = ae.getAttribute(a); if (v) focusP = [a, v]; return !!v; });
     let st = (ae && focusP && ae.selectionStart != null) ? ae.selectionStart : null;
     inPendingRender = false;
+    if (typeof dmSubscribe === 'function') dmSubscribe();
     let s = inSummary();
+    let dmMoN = typeof dmSoPhieuMo === 'function' ? dmSoPhieuMo() : 0, dmCxnN = typeof dmSoCxnMo === 'function' ? dmSoCxnMo() : 0;
     let subs = [
         ['tong', '📊 Tổng quan ca'],
         ['p1', `🧪 P1 Pha mực <span class="badge in-cnt">${s.p1Total}</span>`],
@@ -210,16 +214,19 @@ function renderTabIn() {
         ['p3', `🔰 P3 Mẫu đầu <span class="badge in-cnt">${s.p3Total}</span>${s.p3ChuaKy ? `<span class="badge bg-danger ms-1">${s.p3ChuaKy}</span>` : ''}`],
         ['p4', `🚶 P4 QC đi kiểm 2h <span class="badge in-cnt">${s.p4Done}/${s.p4Rounds}</span>`],
         ['p5', `🛑 P5 Dừng máy <span class="badge in-cnt">${s.p5Total}</span>${s.p5Dang.length ? `<span class="badge bg-danger ms-1">${s.p5Dang.length}</span>` : ''}`],
+        ['dm', `🔁 Đổi mã hàng (BM-IN-01)${dmMoN ? `<span class="badge bg-warning text-dark ms-1">${dmMoN}</span>` : ''}`],
+        ['deco', `📚 Danh mục deco${dmCxnN ? `<span class="badge bg-danger ms-1" title="Điểm cần xác nhận chưa xử lý">${dmCxnN}</span>` : ''}`],
         ['qt', '📖 Quy trình']
     ];
     let nav = `<div class="in-subnav">${subs.map(([k, l]) => `<button type="button" class="in-subbtn ${inSub === k ? 'active' : ''}" data-act="sub" data-v="${k}">${l}</button>`).join('')}</div>`;
     let body = '';
     try {
-        body = ({ tong: inRenderTong, p1: inRenderP1, p2: inRenderP2, p3: inRenderP3, p4: inRenderP4, p5: inRenderP5, qt: inRenderQt }[inSub] || inRenderTong)(s);
+        body = ({ tong: inRenderTong, p1: inRenderP1, p2: inRenderP2, p3: inRenderP3, p4: inRenderP4, p5: inRenderP5, qt: inRenderQt,
+            dm: typeof dmRender === 'function' ? dmRender : inRenderTong, deco: typeof dmRenderDeco === 'function' ? dmRenderDeco : inRenderTong }[inSub] || inRenderTong)(s);
     } catch (e) { console.error(e); body = `<div class="alert alert-danger">Lỗi hiển thị: ${inEsc(e.message)}</div>`; }
     root.innerHTML = nav + `<div class="in-body">${body}</div>`;
     if (focusP) {
-        let el = root.querySelector(`[data-p="${CSS.escape(focusP)}"]`);
+        let el = root.querySelector(`[${focusP[0]}="${CSS.escape(focusP[1])}"]`);
         if (el) { el.focus(); try { if (st != null && el.setSelectionRange) el.setSelectionRange(st, st); } catch (e) { } }
     }
 }
@@ -380,7 +387,7 @@ function inRenderP2() {
 function inRenderP3() {
     let rows = inRows(inData.p3);
     let html = `
-    <div class="in-note">1 phiếu / máy / mỗi lần khởi động (đầu ca, đổi mã, đổi màu, mực mới, sau sửa máy, sau lỗi). <b>Chưa có chữ ký QC → chưa được chạy loạt.</b> Hàng chạy loạt để xe THẺ VÀNG đến khi 5 mẫu đầu sấy – nguội – thử băng keo không bong.</div>
+    <div class="in-note"><b>Đổi mã hàng:</b> lập thêm phiếu <b>🔁 Đổi mã hàng (BM-IN-01)</b> để tick đủ từng bước in theo deco. 1 phiếu / máy / mỗi lần khởi động (đầu ca, đổi mã, đổi màu, mực mới, sau sửa máy, sau lỗi). <b>Chưa có chữ ký QC → chưa được chạy loạt.</b> Hàng chạy loạt để xe THẺ VÀNG đến khi 5 mẫu đầu sấy – nguội – thử băng keo không bong.</div>
     <div class="in-head"><button type="button" class="btn btn-sm btn-3d-primary px-3 ms-auto" data-act="addP3">➕ Phiếu mẫu đầu mới</button></div>`;
     if (!rows.length) html += `<div class="in-empty">Chưa có phiếu mẫu đầu nào trong ca.</div>`;
     rows.slice().reverse().forEach(([id, r]) => {
