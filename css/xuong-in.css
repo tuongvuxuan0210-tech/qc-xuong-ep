@@ -98,3 +98,11 @@
 .in-toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%) translateY(20px); background: #0f172a; color: #fff; border: 1px solid var(--in-ok, #10b981); padding: 8px 16px; border-radius: 10px; font-weight: 700; font-size: 13px; opacity: 0; pointer-events: none; transition: all .25s; z-index: 2000; max-width: 92vw; }
 .in-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .in-toast.bad { border-color: #f43f5e; }
+
+/* ===== Phiếu đổi mã hàng (BM-IN-01) ===== */
+.dm-buoc td, .dm-buoc th { font-size: 12px; }
+.dm-buoc tr.dm-uv td { opacity: .55; font-style: italic; }
+.dm-tick { min-width: 34px; height: 28px; }
+.dm-who { font-size: 10px; color: var(--text-muted); line-height: 1.2; margin-top: 2px; white-space: nowrap; }
+.in-cyc:disabled { opacity: .45; cursor: not-allowed; }
+.in-cyc.ok:disabled, .in-cyc.ng:disabled { opacity: 1; }
