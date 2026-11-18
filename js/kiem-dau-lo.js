@@ -420,7 +420,7 @@ function faiApXuongMacDinh() {
     if (faiXuongDaAp || typeof pqXuongCuaToi !== 'function') return;
     faiXuongDaAp = true;
     let x = pqXuongCuaToi();
-    if (x !== 'ALL') faiXem.xuong = x;
+    if (x === 'X1' || x === 'X2') faiXem.xuong = x;
 }
 function faiTaoPhieuTay(date, ca, m, lyDo) {
     if (!checkAuthOrAlert() || !db) return;

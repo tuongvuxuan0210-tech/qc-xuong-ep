@@ -2,7 +2,8 @@
  * QC System - Phân quyền tài khoản theo xưởng
  * Xưởng Ép Nhựa Hải Tân
  *
- *  - Admin gán mỗi tài khoản QC vào 1 xưởng (Xưởng 1 / Xưởng 2) hoặc "Cả 2 xưởng".
+ *  - Admin gán mỗi tài khoản QC vào 1 xưởng (Xưởng 1 / Xưởng 2), "Cả 2 xưởng ép" hoặc "Xưởng in".
+ *  - Tài khoản Xưởng in chỉ thấy Tab 4 (xưởng in); tài khoản xưởng ép không thấy Tab 4. Admin thấy hết.
  *  - Tài khoản đã gán xưởng: chỉ tạo / kiểm phiếu của máy thuộc xưởng mình (tránh chọn nhầm xưởng).
  *  - Admin: không giới hạn xưởng, mở được bảng "👑 Phân quyền".
  *  - Khi chưa có Admin nào: tài khoản đầu tiên bấm "Nhận quyền Admin" sẽ thành Admin.
@@ -17,7 +18,8 @@ const PQ_PATH = 'qc_phan_quyen_v1';
 const QC_EMAIL_DOMAIN = 'haitan.com';
 // Gõ 'QCX1' khi đăng nhập -> 'qcx1@haitan.com'; gõ đủ email thì giữ nguyên
 function qcEmailTuTen(t) { t = String(t || '').trim(); return t.includes('@') ? t : (t ? t.toLowerCase() + '@' + QC_EMAIL_DOMAIN : ''); }
-const PQ_TEN_XUONG = { ALL: 'Cả 2 xưởng', X1: 'Xưởng 1 (M1–M11)', X2: 'Xưởng 2 (M1–M10)' };
+const PQ_TEN_XUONG = { ALL: 'Cả 2 xưởng ép', X1: 'Xưởng 1 (M1–M11)', X2: 'Xưởng 2 (M1–M10)', IN: '🖨️ Xưởng in' };
+const PQ_TAB_IN = '#tab4XuongIn';
 
 let pqData = { admins: {}, users: {} };
 let pqBound = false;
@@ -31,7 +33,7 @@ function pqLaAdmin(email) { return !!(pqData.admins || {})[pqKhoaEmail(email || 
 function pqXuongCuaToi() {
     if (pqLaAdmin()) return 'ALL';
     let u = (pqData.users || {})[pqKhoaEmail(pqEmailHienTai())];
-    return (u && (u.xuong === 'X1' || u.xuong === 'X2')) ? u.xuong : 'ALL';
+    return (u && (u.xuong === 'X1' || u.xuong === 'X2' || u.xuong === 'IN')) ? u.xuong : 'ALL';
 }
 function pqXuongCuaMay(m) { return (parseInt(m) || 0) >= 11 ? 'X1' : 'X2'; }
 // Danh sách mã nội bộ máy của một xưởng, theo thứ tự hiển thị
@@ -54,6 +56,7 @@ function pqKhoiDong() {
         pqData = { admins: v.admins || {}, users: v.users || {} };
         if (pqKiemConHieuLuc()) return;
         pqGhiLanCuoi();
+        pqApDungTab();
         if (typeof faiApXuongMacDinh === 'function') faiApXuongMacDinh();
         if (typeof faiRender === 'function') faiRender();
         if (document.getElementById('pqModal')) pqVeBang();
@@ -63,6 +66,21 @@ function pqStop() {
     if (db) { try { db.ref(PQ_PATH).off(); } catch (e) {} }
     pqBound = false; pqDaGhiLanCuoi = false;
     pqData = { admins: {}, users: {} };
+    pqApDungTab();
+}
+// Ẩn / hiện tab theo phân quyền: Xưởng in chỉ thấy Tab 4; tài khoản xưởng ép không thấy Tab 4; Admin (hoặc khi chưa có Admin) thấy hết
+function pqApDungTab() {
+    let nut = Array.from(document.querySelectorAll('#qcTabs [data-bs-target]'));
+    if (!nut.length) return;
+    let email = pqEmailHienTai();
+    let x = (!email || pqLaAdmin() || !pqCoAdmin()) ? 'HET' : pqXuongCuaToi();
+    let duoc = t => x === 'HET' ? true : x === 'IN' ? t === PQ_TAB_IN : t !== PQ_TAB_IN;
+    nut.forEach(b => { let li = b.closest('li') || b; li.classList.toggle('d-none', !duoc(b.getAttribute('data-bs-target'))); });
+    let dang = nut.find(b => b.classList.contains('active'));
+    if (dang && !duoc(dang.getAttribute('data-bs-target'))) {
+        let moi = nut.find(b => duoc(b.getAttribute('data-bs-target')));
+        if (moi) moi.click();
+    }
 }
 // Đã có Admin thì chỉ tài khoản có trong danh sách mới được dùng; tài khoản bị xóa khỏi danh sách -> đăng xuất ngay
 function pqKiemConHieuLuc() {
@@ -114,7 +132,7 @@ function pqVeBang() {
     ds.sort((a, b) => String(a.email).localeCompare(String(b.email)));
     let dong = ds.map(u => {
         let ad = !!pqData.admins[u.k];
-        let opt = ['ALL', 'X1', 'X2'].map(x => `<option value="${x}" ${(u.xuong || 'ALL') === x ? 'selected' : ''}>${PQ_TEN_XUONG[x]}</option>`).join('');
+        let opt = ['ALL', 'X1', 'X2', 'IN'].map(x => `<option value="${x}" ${(u.xuong || 'ALL') === x ? 'selected' : ''}>${PQ_TEN_XUONG[x]}</option>`).join('');
         return `<tr>
             <td class="text-start fw-bold">${escapeHtml(pqTenNgan(u.email || u.k))}${u.k === toi ? ' <span class="badge bg-info text-dark">bạn</span>' : ''}</td>
             <td>${ad ? '<span class="badge bg-warning text-dark px-3 py-2">👑 Admin</span>'
@@ -131,9 +149,10 @@ function pqVeBang() {
             <div class="col-6 col-md-3"><input type="text" class="form-control form-control-sm fw-bold text-uppercase" id="pqTenMoi" placeholder="Tên đăng nhập (VD: QCX1)" autocomplete="off"></div>
             <div class="col-6 col-md-3"><input type="text" class="form-control form-control-sm" id="pqMatKhauMoi" placeholder="Mật khẩu (ít nhất 6 ký tự)" autocomplete="off"></div>
             <div class="col-6 col-md-3"><select class="form-select form-select-sm fw-bold" id="pqXuongMoi">
-                <option value="X1">${PQ_TEN_XUONG.X1}</option><option value="X2">${PQ_TEN_XUONG.X2}</option><option value="ALL">${PQ_TEN_XUONG.ALL}</option></select></div>
+                <option value="X1">${PQ_TEN_XUONG.X1}</option><option value="X2">${PQ_TEN_XUONG.X2}</option><option value="ALL">${PQ_TEN_XUONG.ALL}</option><option value="IN">${PQ_TEN_XUONG.IN}</option></select></div>
             <div class="col-6 col-md-3"><button type="button" class="btn btn-sm btn-3d-emerald w-100" id="pqBtnTao" onclick="pqTaoTaiKhoan()">Tạo tài khoản</button></div>
         </div>
+        <div class="small opacity-75 mb-2">🖨️ <b>Xưởng in</b>: chỉ thấy Tab 4 (xưởng in). Tài khoản xưởng ép (Xưởng 1, Xưởng 2, Cả 2 xưởng ép) không thấy Tab 4. 👑 Admin thấy tất cả.</div>
         <div class="table-responsive"><table class="table table-bordered table-sm align-middle text-center mb-0">
             <thead><tr><th>Tài khoản</th><th style="width:190px;">Xưởng</th><th style="width:200px;"></th></tr></thead>
             <tbody>${dong || '<tr><td colspan="3" class="opacity-75">Chưa có tài khoản</td></tr>'}</tbody>

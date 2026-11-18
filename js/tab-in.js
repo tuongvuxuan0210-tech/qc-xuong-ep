@@ -1,13 +1,13 @@
 /**
  * QC System - Tab 4: XƯỞNG IN TAMPON – Kiểm tra hàng ngày (Giai đoạn 1 – Cơ bản)
- * Theo bộ quy trình CB-00…CB-06 và phiếu P1…P5.
+ * Theo bộ quy trình CB-00…CB-06 và phiếu P2 Cấp mực, P3 Mẫu đầu, P4 QC đi kiểm 2h (P1 Pha mực, P5 Dừng máy đã bỏ 18/11/2026).
  *
  * Dữ liệu Firebase: qc_in_store_v1/{YYYY-MM-DD}/{NGAY|DEM}/
- *   p1: { header: {canOk, nguoiPha}, rows: {id: {...}} }   Phiếu pha mực
+ *   p1: (đã bỏ 18/11/2026 – xưởng dùng mực khách hàng pha sẵn, không pha mực; dữ liệu cũ vẫn giữ trên Firebase)
  *   p2: { header: {nguoiCap}, rows: {id: {...}} }           Phiếu cấp mực & châm nước
  *   p3: { id: {...} }                                       Phiếu mẫu đầu
  *   p4: { rounds: { "08:00": { rows: {id: {...}} } } }      Phiếu QC đi kiểm 2 giờ
- *   p5: { id: {...} }                                       Phiếu dừng máy / hàng lỗi
+ *   p5: (đã bỏ 18/11/2026 – không dùng phiếu dừng máy trên phần mềm; dữ liệu cũ vẫn giữ trên Firebase)
  * Mỗi ô nhập được ghi riêng theo đường dẫn (field-level) để nhiều người nhập cùng lúc không đè nhau.
  */
 
@@ -34,11 +34,10 @@ const IN_P3_PREP = [
     'Cài máy theo phiếu thông số'
 ];
 const IN_P3_CRIT = ['Đúng vị trí', 'Đúng màu (so mẫu chuẩn)', 'Nét đủ, phủ kín', 'Không nhòe, không lem'];
-const IN_P3_LYDO = ['Đầu ca', 'Đổi mã', 'Đổi màu', 'Mực mới', 'Sau sửa máy', 'Sau lỗi'];
+const IN_P3_LYDO = ['Đầu ca', 'Đổi màu', 'Mực mới', 'Sau sửa máy', 'Sau lỗi'];   // Đổi mã hàng → phiếu BM-IN-01 (in-doi-ma.js), không lập P3
 const IN_P4_COLS = [
     ['c1', 'Cốc mực còn hạn, có nhãn'],
     ['c2', 'Không có can nước tại máy'],
-    ['c3', 'Đeo găng'],
     ['c4', 'Nét in tốt (xem 5 sp)'],
     ['c5', 'Thử băng keo 1 sp (đã nguội)']
 ];
@@ -207,13 +206,13 @@ function renderTabIn() {
     if (typeof dmSubscribe === 'function') dmSubscribe();
     let s = inSummary();
     let dmMoN = typeof dmSoPhieuMo === 'function' ? dmSoPhieuMo() : 0, dmCxnN = typeof dmSoCxnMo === 'function' ? dmSoCxnMo() : 0;
+    if (inSub === 'p1') inSub = 'p2';   // P1 Pha mực đã bỏ
+    if (inSub === 'p5') inSub = 'tong'; // P5 Dừng máy đã bỏ
     let subs = [
         ['tong', '📊 Tổng quan ca'],
-        ['p1', `🧪 P1 Pha mực <span class="badge in-cnt">${s.p1Total}</span>`],
-        ['p2', `🥤 P2 Cấp mực & châm <span class="badge in-cnt">${s.p2Total}</span>`],
+        ['p2', `🥤 P2 Cấp mực <span class="badge in-cnt">${s.p2Total}</span>`],
         ['p3', `🔰 P3 Mẫu đầu <span class="badge in-cnt">${s.p3Total}</span>${s.p3ChuaKy ? `<span class="badge bg-danger ms-1">${s.p3ChuaKy}</span>` : ''}`],
         ['p4', `🚶 P4 QC đi kiểm 2h <span class="badge in-cnt">${s.p4Done}/${s.p4Rounds}</span>`],
-        ['p5', `🛑 P5 Dừng máy <span class="badge in-cnt">${s.p5Total}</span>${s.p5Dang.length ? `<span class="badge bg-danger ms-1">${s.p5Dang.length}</span>` : ''}`],
         ['dm', `🔁 Đổi mã hàng (BM-IN-01)${dmMoN ? `<span class="badge bg-warning text-dark ms-1">${dmMoN}</span>` : ''}`],
         ['deco', `📚 Danh mục deco${dmCxnN ? `<span class="badge bg-danger ms-1" title="Điểm cần xác nhận chưa xử lý">${dmCxnN}</span>` : ''}`],
         ['qt', '📖 Quy trình']
@@ -221,7 +220,7 @@ function renderTabIn() {
     let nav = `<div class="in-subnav">${subs.map(([k, l]) => `<button type="button" class="in-subbtn ${inSub === k ? 'active' : ''}" data-act="sub" data-v="${k}">${l}</button>`).join('')}</div>`;
     let body = '';
     try {
-        body = ({ tong: inRenderTong, p1: inRenderP1, p2: inRenderP2, p3: inRenderP3, p4: inRenderP4, p5: inRenderP5, qt: inRenderQt,
+        body = ({ tong: inRenderTong, p2: inRenderP2, p3: inRenderP3, p4: inRenderP4, qt: inRenderQt,
             dm: typeof dmRender === 'function' ? dmRender : inRenderTong, deco: typeof dmRenderDeco === 'function' ? dmRenderDeco : inRenderTong }[inSub] || inRenderTong)(s);
     } catch (e) { console.error(e); body = `<div class="alert alert-danger">Lỗi hiển thị: ${inEsc(e.message)}</div>`; }
     root.innerHTML = nav + `<div class="in-body">${body}</div>`;
@@ -260,20 +259,18 @@ function inRenderTong(s) {
     let kpi = (title, val, sub, tone) => `<div class="in-kpi ${tone || ''}"><div class="in-kpi-t">${title}</div><div class="in-kpi-v">${val}</div><div class="in-kpi-s">${sub || ''}</div></div>`;
     let tone = (bad, warn) => bad ? 'bad' : warn ? 'warn' : 'good';
     let rules = [
-        ['1', 'Pha mực bằng cân, có nhãn', s.p1Total > 0 && s.p1Sai === 0 && s.p1KhongTyLe === 0 && s.p1ThieuNhan === 0 && s.p1Can === 'DUNG', s.p1Total === 0 ? 'Chưa có cốc nào' : `${s.p1Sai} cốc lệch · ${s.p1ThieuNhan} cốc chưa dán nhãn · cân đầu ca: ${s.p1Can === 'DUNG' ? 'đúng' : s.p1Can === 'SAI' ? 'SAI' : 'chưa thử'}`],
+        ['1', 'Chỉ cấp cốc mực còn hạn, có nhãn', s.p2Total > 0 && s.p2HetHan === 0, s.p2Total === 0 ? 'Chưa có lượt cấp mực nào' : `${s.p2HetHan} cốc quá hạn 4h đã cấp · mực khách hàng pha sẵn, không pha tại xưởng`],
         ['2', 'Không tự đổ nước vào mực', s.p4CanNuoc === 0 && s.p2DuCham === 0, `${s.p4CanNuoc} lần thấy can nước tại máy · ${s.p2DuCham} cốc đã châm đủ 3 lần (phải thay)`],
         ['3', 'Không chạy loạt khi QC chưa ký mẫu đầu', s.p3ViPham === 0, s.p3ViPham ? `${s.p3ViPham} máy ghi giờ chạy loạt nhưng chưa có QC ký` : 'Không có vi phạm'],
-        ['4', 'Thấy lỗi là dừng máy', s.p4Ng.length + s.p3Bong <= s.p5Total, `${s.p4Ng.length + s.p3Bong} lần phát hiện NG/bong · ${s.p5Total} phiếu dừng máy`],
-        ['5', 'Ghi phiếu đủ', s.p1Total > 0 && s.p2Total > 0 && s.p3Total > 0 && s.p4Done >= s.p4Rounds, `P1 ${s.p1Total} · P2 ${s.p2Total} · P3 ${s.p3Total} · P4 ${s.p4Done}/${s.p4Rounds} vòng`]
+        ['4', 'Thấy lỗi là dừng máy', s.p4Ng.length + s.p3Bong === 0, s.p4Ng.length + s.p3Bong ? `${s.p4Ng.length + s.p3Bong} lần phát hiện NG / bong trong ca – kiểm tra đã dừng máy, xử lý` : 'Không có lỗi trong ca'],
+        ['5', 'Ghi phiếu đủ', s.p2Total > 0 && s.p3Total > 0 && s.p4Done >= s.p4Rounds, `P2 ${s.p2Total} · P3 ${s.p3Total} · P4 ${s.p4Done}/${s.p4Rounds} vòng`]
     ];
     let chips = (arr, cls) => arr.length ? arr.map(m => `<span class="in-chip ${cls}">Máy ${inEsc(m)}</span>`).join('') : '<span class="opacity-75 small">Không có</span>';
     return `
     <div class="in-kpis">
-        ${kpi('Cốc mực đã pha (P1)', s.p1Total, `${s.p1Sai} cốc lệch > 1 g · QC cân lại: ${s.p1QcCheck ? '✅ đã làm' : '⚠️ chưa'}`, tone(s.p1Sai > 0 || s.p1Can === 'SAI', !s.p1QcCheck && s.p1Total > 0))}
         ${kpi('Lượt cấp mực (P2)', s.p2Total, `${s.p2HetHan} cốc quá hạn 4h · ${s.p2DuCham} cốc châm đủ 3 lần`, tone(s.p2HetHan > 0, s.p2DuCham > 0))}
         ${kpi('Mẫu đầu (P3)', s.p3Total, `${s.p3ChuaKy} chưa QC ký · ${s.p3TheVang.length} xe thẻ vàng · ${s.p3Bong} bong`, tone(s.p3Bong > 0 || s.p3ViPham > 0, s.p3ChuaKy > 0 || s.p3TheVang.length > 0))}
         ${kpi('QC đi kiểm 2h (P4)', `${s.p4Done}/${s.p4Rounds}`, `${s.p4Ng.length} lượt máy NG`, tone(s.p4Ng.length > 0, s.p4Done < s.p4Rounds))}
-        ${kpi('Dừng máy (P5)', s.p5Total, `${s.p5Dang.length} máy đang treo thẻ đỏ · ${s.p5ChoQd} lô chờ Phòng CL`, tone(s.p5Dang.length > 0, s.p5ChoQd > 0))}
     </div>
     <div class="row g-3 mt-1">
         <div class="col-lg-7">
@@ -285,7 +282,6 @@ function inRenderTong(s) {
         <div class="col-lg-5">
             <div class="in-panel">
                 <div class="in-panel-h">🏷️ BẢNG THẺ TẠI XƯỞNG</div>
-                <div class="mb-2"><div class="small fw-bold mb-1">🟥 Thẻ đỏ – máy đang dừng (chỉ QC gỡ)</div>${chips(s.p5Dang, 'red')}</div>
                 <div class="mb-2"><div class="small fw-bold mb-1">🟨 Thẻ vàng – xe hàng chờ thử băng keo</div>${chips(s.p3TheVang, 'yellow')}</div>
                 <div><div class="small fw-bold mb-1">⚠️ Máy NG khi QC đi kiểm</div>${s.p4Ng.length ? s.p4Ng.map(x => `<span class="in-chip red">Máy ${inEsc(x.may)} · ${x.rd}</span>`).join('') : '<span class="opacity-75 small">Không có</span>'}</div>
             </div>
@@ -344,16 +340,15 @@ function inRenderP1() {
 function inRenderP2() {
     let h = inData.p2?.header || {};
     let rows = inRows(inData.p2?.rows);
-    let cups = inRows(inData.p1?.rows).filter(([, r]) => r.gioPha);
     let html = `
-    <div class="in-note">Cột <b>Còn hạn?</b> tự báo HẾT HẠN nếu giờ cấp quá 4 giờ sau giờ pha → <b>KHÔNG cấp</b>, đổ vào can thu hồi. Châm nước: chỉ <b>TỔ TRƯỞNG</b>, mỗi lần 1 lọ, gạch 1 vạch trên nhãn. Đủ 3 lần mà vẫn đặc → vét khay, thay cốc mới (dòng mới). Tại máy KHÔNG có can nước pha.</div>
+    <div class="in-note">Xưởng dùng <b>mực khách hàng pha sẵn</b> – không pha mực tại xưởng. Ghi màu / mã mực và giờ pha trên nhãn cốc. Cột <b>Còn hạn?</b> tự báo HẾT HẠN nếu giờ cấp quá 4 giờ sau giờ pha → <b>KHÔNG cấp</b>, đổ vào can thu hồi. Châm nước: chỉ <b>TỔ TRƯỞNG</b>, mỗi lần 1 lọ, gạch 1 vạch trên nhãn. Đủ 3 lần mà vẫn đặc → vét khay, thay cốc mới (dòng mới). Tại máy KHÔNG có can nước pha.</div>
     <div class="in-head">
         <label>Người cấp ${inInput('p2/header/nguoiCap', h.nguoiCap, { cls: 'in-w140', ph: 'Họ tên' })}</label>
         <button type="button" class="btn btn-sm btn-3d-primary px-3 ms-auto" data-act="addP2">➕ Lượt cấp mới</button>
     </div>
     <div class="table-responsive"><table class="table table-bordered align-middle text-center in-table" style="min-width:1320px">
-    <thead><tr><th>#</th><th>Giờ cấp</th><th>Máy số</th><th>Lấy từ cốc P1</th><th>Màu / mã mực</th><th>Giờ pha (trên nhãn)</th><th>Còn hạn? (tự)</th><th>Đã đổ mực cũ vào can thu hồi</th><th>Người cấp</th><th>Thợ in ký nhận</th><th>Châm lần 1</th><th>Châm lần 2</th><th>Châm lần 3</th><th>Tổ trưởng ký</th><th>Ghi chú</th><th></th></tr></thead><tbody>`;
-    if (!rows.length) html += `<tr><td colspan="16" class="opacity-75 py-3">Chưa có lượt cấp mực nào trong ca.</td></tr>`;
+    <thead><tr><th>#</th><th>Giờ cấp</th><th>Máy số</th><th>Màu / mã mực</th><th>Giờ pha (trên nhãn cốc)</th><th>Còn hạn? (tự)</th><th>Đã đổ mực cũ vào can thu hồi</th><th>Người cấp</th><th>Thợ in ký nhận</th><th>Châm lần 1</th><th>Châm lần 2</th><th>Châm lần 3</th><th>Tổ trưởng ký</th><th>Ghi chú</th><th></th></tr></thead><tbody>`;
+    if (!rows.length) html += `<tr><td colspan="15" class="opacity-75 py-3">Chưa có lượt cấp mực nào trong ca.</td></tr>`;
     rows.forEach(([id, r], i) => {
         let c = inP2Calc(r), p = `p2/rows/${id}`;
         let nextCham = !r.cham1 ? 1 : !r.cham2 ? 2 : !r.cham3 ? 3 : 0;
@@ -366,7 +361,6 @@ function inRenderP2() {
             <td>${i + 1}</td>
             <td><div class="d-flex gap-1">${inInput(p + '/gioCap', r.gioCap, { type: 'time', cls: 'in-w95' })}</div></td>
             <td>${inInput(p + '/may', r.may, { cls: 'in-w60' })}</td>
-            <td><select class="form-select form-select-sm in-w140" data-pick="${p}"><option value="">— chọn cốc —</option>${cups.map(([cid, cr]) => `<option value="${cid}" ${r.cocId === cid ? 'selected' : ''}>${inEsc((cr.mau || '?') + ' · pha ' + cr.gioPha + (cr.maHang ? ' · ' + cr.maHang : ''))}</option>`).join('')}</select></td>
             <td>${inInput(p + '/mau', r.mau, { cls: 'in-w120' })}</td>
             <td>${inInput(p + '/gioPha', r.gioPha, { type: 'time', cls: 'in-w95' })}</td>
             <td>${c.conHan == null ? '—' : c.conHan ? `<span class="in-tag ok">CÒN HẠN</span><div class="small opacity-75">${Math.floor(c.tuoi / 60)}h${String(c.tuoi % 60).padStart(2, '0')}</div>` : '<span class="in-tag ng">HẾT HẠN</span><div class="small text-danger fw-bold">KHÔNG CẤP</div>'}</td>
@@ -377,7 +371,7 @@ function inRenderP2() {
             <td>${inInput(p + '/toTruong', r.toTruong, { cls: 'in-w100' })}</td>
             <td>${inInput(p + '/ghiChu', r.ghiChu, { cls: 'in-w140' })}</td>
             <td>${inDel(p, 'lượt cấp')}</td></tr>`;
-        if (c.duCham) html += `<tr class="in-row-warn"><td colspan="16" class="text-start small">⚠️ Máy ${inEsc(r.may || '?')}: đã châm đủ ${IN_CHAM_TOI_DA} lần → KHÔNG châm nữa: vét khay vào can thu hồi, thay cốc mực mới (thêm lượt cấp mới).</td></tr>`;
+        if (c.duCham) html += `<tr class="in-row-warn"><td colspan="15" class="text-start small">⚠️ Máy ${inEsc(r.may || '?')}: đã châm đủ ${IN_CHAM_TOI_DA} lần → KHÔNG châm nữa: vét khay vào can thu hồi, thay cốc mực mới (thêm lượt cấp mới).</td></tr>`;
     });
     html += `</tbody></table></div>`;
     return html;
@@ -387,7 +381,7 @@ function inRenderP2() {
 function inRenderP3() {
     let rows = inRows(inData.p3);
     let html = `
-    <div class="in-note"><b>Đổi mã hàng:</b> lập thêm phiếu <b>🔁 Đổi mã hàng (BM-IN-01)</b> để tick đủ từng bước in theo deco. 1 phiếu / máy / mỗi lần khởi động (đầu ca, đổi mã, đổi màu, mực mới, sau sửa máy, sau lỗi). <b>Chưa có chữ ký QC → chưa được chạy loạt.</b> Hàng chạy loạt để xe THẺ VÀNG đến khi 5 mẫu đầu sấy – nguội – thử băng keo không bong.</div>
+    <div class="in-note"><b>Đổi mã hàng: KHÔNG lập P3</b> – dùng phiếu <b>🔁 Đổi mã hàng (BM-IN-01)</b> (đã gồm kiểm 5 SP đầu và thử băng keo sau sấy). P3: 1 phiếu / máy / mỗi lần khởi động khác (đầu ca, đổi màu, mực mới, sau sửa máy, sau lỗi). <b>Chưa có chữ ký QC → chưa được chạy loạt.</b> Hàng chạy loạt để xe THẺ VÀNG đến khi 5 mẫu đầu sấy – nguội – thử băng keo không bong.</div>
     <div class="in-head"><button type="button" class="btn btn-sm btn-3d-primary px-3 ms-auto" data-act="addP3">➕ Phiếu mẫu đầu mới</button></div>`;
     if (!rows.length) html += `<div class="in-empty">Chưa có phiếu mẫu đầu nào trong ca.</div>`;
     rows.slice().reverse().forEach(([id, r]) => {
@@ -399,7 +393,7 @@ function inRenderP3() {
                 <label>Mã hàng ${inInput(p + '/maHang', r.maHang, { cls: 'in-w110' })}</label>
                 <label>Màu ${inInput(p + '/mau', r.mau, { cls: 'in-w100' })}</label>
                 <label>Nhựa ${inSelect(p + '/nhua', r.nhua, ['PVC', 'ABS', 'PP'], { cls: 'in-w80' })}</label>
-                <label>Lý do ${inSelect(p + '/lyDo', r.lyDo, IN_P3_LYDO, { cls: 'in-w130' })}</label>
+                <label>Lý do ${inSelect(p + '/lyDo', r.lyDo, r.lyDo === 'Đổi mã' ? IN_P3_LYDO.concat(['Đổi mã']) : IN_P3_LYDO, { cls: 'in-w130' })}</label>
             </div>
             <div class="d-flex align-items-center gap-2"><span class="in-status ${c.cls}">${c.status}</span>${inDel(p, 'phiếu mẫu đầu')}</div>
         </div>
@@ -432,7 +426,7 @@ function inRenderP3() {
             <label>Gỡ thẻ vàng ${inSign(r.goTheVang, 'goTheVang', p + '/goTheVang', r.qcKy && r.bangKeo === 'KHONG_BONG', '🟨 QC gỡ thẻ vàng', 'Cần QC ký mẫu đầu và băng keo không bong')}</label>
         </div>
         <div class="small opacity-75 mt-1">Cách thử: dán băng keo kín chỗ in, miết chặt, chờ 1 phút, giật mạnh. Soi băng keo: không dính mực là đạt.</div>
-        ${r.bangKeo === 'BONG' ? `<div class="in-alert mt-2">🟥 BONG: DỪNG MÁY, giữ lại cả xe thẻ vàng → lập phiếu dừng máy. ${r.p5Id ? `<span class="ms-2">Đã lập P5 ✓</span>` : `<button type="button" class="btn btn-sm btn-3d-ruby px-3 ms-2" data-act="p5FromP3" data-path="${p}">🛑 Lập phiếu dừng máy (P5)</button>`}</div>` : ''}
+        ${r.bangKeo === 'BONG' ? `<div class="in-alert mt-2">🟥 BONG: DỪNG MÁY, giữ lại cả xe thẻ vàng → tìm nguyên nhân, làm lại mẫu đầu.</div>` : ''}
         </div>`;
     });
     return html;
@@ -450,7 +444,7 @@ function inRenderP4() {
     let rows = inRows(inData.p4?.rounds?.[rd]?.rows);
     let hdr = inData.p4?.rounds?.[rd] || {};
     let html = `
-    <div class="in-note">QC đi 1 vòng / 2 giờ. Ghi <b>OK</b> hoặc <b>NG</b> cho từng máy. Có 1 ô NG → KẾT QUẢ báo NG → <b>DỪNG MÁY</b> đó, lập P5.</div>
+    <div class="in-note">QC đi 1 vòng / 2 giờ. Ghi <b>OK</b> hoặc <b>NG</b> cho từng máy. Có 1 ô NG → KẾT QUẢ báo NG → <b>DỪNG MÁY</b> đó, ghi rõ lỗi vào cột Ghi chú.</div>
     <div class="in-rounds">${rounds.map(x => {
         let rr = inRows(inData.p4?.rounds?.[x]?.rows);
         let done = rr.some(([, r]) => inP4Calc(r) !== ''), ng = rr.some(([, r]) => inP4Calc(r) === 'NG');
@@ -461,20 +455,20 @@ function inRenderP4() {
         <label>Giờ đi kiểm thực tế ${inInput(`p4/rounds/${rd}/gio`, hdr.gio || '', { type: 'time', cls: 'in-w95' })}</label>
         <div class="ms-auto d-flex gap-2 flex-wrap">
             <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-3" data-act="p4Prev">📋 Lấy danh sách máy vòng trước</button>
-            <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-3" data-act="p4FromP3">🔰 Lấy máy từ phiếu mẫu đầu</button>
+            <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-3" data-act="p4FromP3">🔰 Lấy máy từ phiếu mẫu đầu / đổi mã</button>
             <button type="button" class="btn btn-sm btn-3d-primary px-3" data-act="addP4">➕ Thêm máy</button>
         </div>
     </div>
     <div class="table-responsive"><table class="table table-bordered align-middle text-center in-table" style="min-width:1080px">
     <thead><tr><th>Máy số</th><th>Mã hàng</th>${IN_P4_COLS.map(([, t]) => `<th>${t}</th>`).join('')}<th>KẾT QUẢ (tự)</th><th>Ghi chú</th><th></th></tr></thead><tbody>`;
-    if (!rows.length) html += `<tr><td colspan="10" class="opacity-75 py-3">Chưa có máy nào trong vòng ${rd}. Thêm máy hoặc lấy danh sách từ vòng trước / phiếu mẫu đầu.</td></tr>`;
+    if (!rows.length) html += `<tr><td colspan="${IN_P4_COLS.length + 5}" class="opacity-75 py-3">Chưa có máy nào trong vòng ${rd}. Thêm máy hoặc lấy danh sách từ vòng trước / phiếu mẫu đầu.</td></tr>`;
     rows.forEach(([id, r]) => {
         let p = `p4/rounds/${rd}/rows/${id}`, kq = inP4Calc(r);
         html += `<tr class="${kq === 'NG' ? 'in-row-bad' : ''}">
             <td>${inInput(p + '/may', r.may, { cls: 'in-w60' })}</td>
             <td>${inInput(p + '/maHang', r.maHang, { cls: 'in-w110' })}</td>
             ${IN_P4_COLS.map(([k]) => `<td>${inCyc(p + '/' + k, r[k], { OK: 'OK', NG: 'NG' })}</td>`).join('')}
-            <td>${kq === 'OK' ? '<span class="in-tag ok">OK</span>' : kq === 'NG' ? `<span class="in-tag ng">NG</span><div class="mt-1">${r.p5Id ? '<span class="small">Đã lập P5 ✓</span>' : `<button type="button" class="in-mini ng" data-act="p5FromP4" data-path="${p}">🛑 Dừng máy – lập P5</button>`}</div>` : '—'}</td>
+            <td>${kq === 'OK' ? '<span class="in-tag ok">OK</span>' : kq === 'NG' ? `<span class="in-tag ng">NG</span><div class="small text-danger fw-bold mt-1">DỪNG MÁY</div>` : '—'}</td>
             <td>${inInput(p + '/ghiChu', r.ghiChu, { cls: 'in-w160' })}</td>
             <td>${inDel(p, 'máy')}</td></tr>`;
     });
@@ -524,11 +518,10 @@ function inRenderP5() {
 // ---------- QUY TRÌNH (tham chiếu) ----------
 function inRenderQt() {
     let qt = [
-        ['CB-01 Pha mực', 'Đầu ca thử cân bằng quả cân · lấy can nước ĐÚNG MÀU NHÃN (PVC = xanh lá) · cân mực → TRỪ BÌ → nước = mực × 1,2 · lệch ≤ 1 g · khuấy 3–5 phút · dán nhãn: màu, giờ pha, HẠN (+4 giờ), người pha · QC cân lại 1 cốc / ca.'],
+        ['CB-01 Mực', 'Xưởng dùng MỰC KHÁCH HÀNG PHA SẴN – không pha mực tại xưởng. Cốc mực phải có nhãn: màu / mã mực, giờ pha, HẠN (+4 giờ). Hết hạn → không cấp, đổ can thu hồi.'],
         ['CB-02 Cấp mực & khi mực đặc', 'Thợ in không tự lấy / pha mực · chỉ cấp cốc còn hạn · mực cũ đổ can thu hồi RIÊNG, cấm đổ vào cốc mới · tại máy KHÔNG có can nước · mực đặc: tổ trưởng châm 1 lọ, gạch 1 vạch, tối đa 3 lần rồi thay cốc · in thử 3 sp sau mỗi lần châm.'],
-        ['CB-03 Mẫu đầu', 'Đầu ca / đổi mã / đổi màu / mực mới / sau sửa máy / sau lỗi → in 5 sp · tổ trưởng xem, QC KÝ mới chạy loạt · hàng loạt vào XE THẺ VÀNG · 5 mẫu sấy – nguội – thử băng keo · không bong: QC gỡ thẻ vàng · bong: DỪNG MÁY → CB-05.'],
+        ['CB-03 Mẫu đầu', 'ĐỔI MÃ HÀNG: làm phiếu BM-IN-01 (KTV lắp đặt → tổ trưởng đếm lại nét → QC kiểm 5 SP đầu, sấy – nguội – thử băng keo), không lập P3. Đầu ca / đổi màu / mực mới / sau sửa máy / sau lỗi → in 5 sp · tổ trưởng xem, QC KÝ mới chạy loạt · hàng loạt vào XE THẺ VÀNG · 5 mẫu sấy – nguội – thử băng keo · không bong: QC gỡ thẻ vàng · bong: DỪNG MÁY → CB-05.'],
         ['CB-04 In loạt – sấy – QC đi kiểm', 'Đeo găng cả ca · 30 phút soi nét 1 lần · KHÔNG tự chỉnh áp lực, KHÔNG để can nước, KHÔNG chạm tay chỗ in · xếp khay 1 lớp, sấy: PVC dẻo 50–55 °C, PVC cứng / ABS 55–60 °C, 20–30 phút, nguội ≥ 30 phút · QC 2 giờ / vòng (P4).'],
-        ['CB-05 Có lỗi – dừng máy', 'DỪNG MÁY, thẻ đỏ (chỉ QC gỡ) · gom hàng từ lần kiểm đạt gần nhất, tem đỏ · tìm nguyên nhân mực / phôi / máy / lò · làm lại mẫu đầu · đạt → gỡ thẻ đỏ · Phòng CL quyết định hàng giữ trong 24 giờ.'],
         ['CB-06 Kiểm hàng & xuất', 'Chỉ hàng khô đủ 24 giờ và QC kiểm đạt (CS-IN-06) mới đóng gói, xuất · kho kiểm phiếu QC đạt, đủ 24 giờ, đúng số lượng (CS-IN-07).']
     ];
     return `<div class="in-note">Tóm tắt bộ quy trình Giai đoạn 1 – Cơ bản (GD1_Co_ban_xuong_in). Mục tiêu: cả xưởng làm đều 5 việc gốc trước khi chuyển Giai đoạn 2.</div>
@@ -607,8 +600,9 @@ function inOnClick(e) {
         case 'p4FromP3': {
             let list = [], seen = {};
             inRows(inData.p3).forEach(([, r]) => { if (r.may) seen[r.may] = { may: r.may, maHang: r.maHang }; });
+            if (typeof dmPhieu !== 'undefined') Object.values(dmPhieu || {}).forEach(p => { if (p && p.may && p.kl === 'DAT') seen[p.may] = { may: p.may, maHang: p.ma }; });
             Object.values(seen).forEach(x => list.push(x));
-            if (!list.length) { inToast('Chưa có phiếu mẫu đầu nào ghi máy số.', true); break; }
+            if (!list.length) { inToast('Chưa có phiếu mẫu đầu / phiếu đổi mã đạt nào ghi máy số.', true); break; }
             inP4AddMachines(list); break;
         }
         case 'p4AllOk': {
@@ -620,7 +614,7 @@ function inOnClick(e) {
             let loi = {}; if (r.c4 === 'NG') loi.matNet = true; if (r.c5 === 'NG') loi.bangKeo = true;
             let nn = {}; if (r.c1 === 'NG' || r.c2 === 'NG') nn.muc = true;
             let ng = IN_P4_COLS.filter(([k]) => r[k] === 'NG').map(([, t]) => t).join('; ');
-            inWrite(`p5/${id}`, { t, gioDung: inNowHM(), may: r.may || '', maHang: r.maHang || '', phatHien: 'QC đi kiểm', loi, nn, loiKhac: (r.c1 === 'NG' || r.c2 === 'NG' || r.c3 === 'NG') ? ng : '' });
+            inWrite(`p5/${id}`, { t, gioDung: inNowHM(), may: r.may || '', maHang: r.maHang || '', phatHien: 'QC đi kiểm', loi, nn, loiKhac: (r.c1 === 'NG' || r.c2 === 'NG') ? ng : '' });
             inWrite(path + '/p5Id', id);
             inSub = 'p5'; inZaloP5(`p5/${id}`, true); break;
         }
@@ -656,10 +650,6 @@ function exportTabInExcel() {
     let head = t => [[t], [`Ngày: ${inDate()} · ${ca}`], []];
     let add = (name, aoa) => { let ws = XLSX.utils.aoa_to_sheet(aoa); ws['!cols'] = (aoa[3] || []).map(() => ({ wch: 16 })); XLSX.utils.book_append_sheet(wb, ws, name); };
     let yn = v => v === 'OK' ? '✓' : v === 'NG' ? '✗' : '';
-    let h1 = inData.p1?.header || {};
-    add('P1 Pha muc', head('P1 · PHIẾU PHA MỰC').concat([[`Thử cân đầu ca: ${h1.canOk === 'DUNG' ? 'Đúng' : h1.canOk === 'SAI' ? 'Sai' : ''}`, `Người pha: ${h1.nguoiPha || ''}`]],
-        [['STT', 'Giờ pha', 'Mã hàng', 'Màu / mã mực', 'Nhựa', 'Can nước đúng màu', 'Gram mực', 'Gram nước phải rót', 'Gram nước đã rót', 'Đúng?', 'Hạn dùng', 'Dán nhãn', 'Người pha', 'QC kiểm']],
-        inRows(inData.p1?.rows).map(([, r], i) => { let c = inP1Calc(r); return [i + 1, r.gioPha || '', r.maHang || '', r.mau || '', r.nhua || 'PVC', yn(r.canNuoc), r.gramMuc || '', c.khongTyLe ? 'Chưa có tỷ lệ' : (c.phai ?? ''), r.gramNuoc || '', c.dung == null ? '' : c.dung ? 'ĐÚNG' : 'SAI', c.han, yn(r.nhan), r.nguoi || '', r.qc ? `${r.qc.by} ${r.qc.at} ${r.qcKq || ''}` : '']; })));
     add('P2 Cap muc', head('P2 · PHIẾU CẤP MỰC & CHÂM NƯỚC').concat([['STT', 'Giờ cấp', 'Máy số', 'Màu / mã mực', 'Giờ pha', 'Còn hạn?', 'Đổ mực cũ vào can thu hồi', 'Người cấp', 'Thợ in ký nhận', 'Châm 1', 'Châm 2', 'Châm 3', 'Tổ trưởng ký', 'Ghi chú']],
         inRows(inData.p2?.rows).map(([, r], i) => { let c = inP2Calc(r); return [i + 1, r.gioCap || '', r.may || '', r.mau || '', r.gioPha || '', c.conHan == null ? '' : c.conHan ? 'Còn hạn' : 'HẾT HẠN', yn(r.doMucCu), r.nguoiCap || '', r.thoIn || '', r.cham1 || '', r.cham2 || '', r.cham3 || '', r.toTruong || '', r.ghiChu || '']; })));
     add('P3 Mau dau', head('P3 · PHIẾU MẪU ĐẦU').concat([['Máy', 'Mã hàng', 'Màu', 'Nhựa', 'Lý do', ...IN_P3_PREP.map((t, i) => `A${i + 1}. ${t}`), ...IN_P3_CRIT.map((t, i) => `B${i + 1}. ${t}`), 'Tổ trưởng ký', 'QC ký', 'Giờ chạy loạt', 'Xe số', 'Vào lò', 'Ra lò', 'Nguội đến', 'Băng keo', 'Gỡ thẻ vàng', 'Trạng thái']],
@@ -667,8 +657,6 @@ function exportTabInExcel() {
     let p4 = [['Vòng', 'QC', 'Máy số', 'Mã hàng', ...IN_P4_COLS.map(([, t]) => t), 'KẾT QUẢ', 'Ghi chú']];
     IN_ROUNDS[inShift()].forEach(rd => { let R = inData.p4?.rounds?.[rd] || {}; inRows(R.rows).forEach(([, r]) => p4.push([rd, R.qc || '', r.may || '', r.maHang || '', ...IN_P4_COLS.map(([k]) => r[k] || ''), inP4Calc(r), r.ghiChu || ''])); });
     add('P4 QC di kiem', head('P4 · PHIẾU QC ĐI KIỂM 2 GIỜ / LẦN').concat(p4));
-    add('P5 Dung may', head('P5 · PHIẾU DỪNG MÁY / HÀNG LỖI').concat([['Giờ dừng', 'Máy', 'Mã hàng', 'Màu', 'Phát hiện khi', 'Lỗi', 'SL giữ', 'Để ở', 'Tem đỏ', 'Nguyên nhân', 'Đã sửa', 'Mẫu đầu lại (giờ)', 'KQ', 'Gỡ thẻ đỏ', 'Dùng được', 'Tẩy in lại', 'Hủy', 'Người QĐ', 'Trạng thái']],
-        inRows(inData.p5).map(([, r]) => [r.gioDung || '', r.may || '', r.maHang || '', r.mau || '', r.phatHien || '', IN_P5_LOI.filter(([k]) => (r.loi || {})[k]).map(([, t]) => t).concat(r.loiKhac ? [r.loiKhac] : []).join('; '), r.slGiu || '', r.deO || '', r.temDo ? '✓' : '', IN_P5_NN.filter(([k]) => (r.nn || {})[k]).map(([, t]) => t).concat(r.nnKhac ? [r.nnKhac] : []).join('; '), r.daSua || '', r.p3Gio || '', r.p3Kq === 'DAT' ? 'Đạt' : r.p3Kq === 'CHUA' ? 'Chưa đạt' : '', r.goTheDo ? `${r.goTheDo.by} ${r.goTheDo.at}` : '', r.qd?.dung || '', r.qd?.tay || '', r.qd?.huy || '', r.qd?.by || '', inP5Calc(r).status])));
     XLSX.writeFile(wb, `Xuong_In_${inDate()}_${inShift()}.xlsx`);
 }
 
