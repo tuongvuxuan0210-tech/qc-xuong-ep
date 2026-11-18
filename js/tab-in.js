@@ -18,6 +18,7 @@ let inP4Round = null;         // vòng kiểm P4 đang mở
 let inListenerPath = null;
 let inPendingRender = false;
 let inStarted = false;
+let inP4Truoc = null, inP4TruocPath = null;   // P4 của ca liền trước (để so mã hàng vòng đầu ca)
 
 const IN_RATIO_PVC = 1.2;     // nước = mực × 1,2 (nhựa PVC, nước T-11-3009)
 const IN_HAN_PHUT = 240;      // hạn dùng cốc mực: 4 giờ
@@ -157,6 +158,12 @@ function inSummary() {
     let ng = [];
     rounds.forEach(rd => inRows(inData.p4?.rounds?.[rd]?.rows).forEach(([, r]) => { if (inP4Calc(r) === 'NG') ng.push({ rd, may: r.may || '?' }); }));
     s.p4Ng = ng;
+    s.p4DoiMa = []; s.p4DoiMaOk = 0;
+    rounds.forEach(rd => inRows(inData.p4?.rounds?.[rd]?.rows).forEach(([, r]) => {
+        let dm = inP4DoiMa(rd, r);
+        if (dm && dm.loai === 'vipham') s.p4DoiMa.push({ rd, may: r.may, ma: r.maHang, truoc: dm.truoc.ma, coPhieu: !!dm.phieu });
+        if (dm && dm.loai === 'ok') s.p4DoiMaOk++;
+    }));
     s.p4CanNuoc = rounds.reduce((n, rd) => n + inRows(inData.p4?.rounds?.[rd]?.rows).filter(([, r]) => r.c2 === 'NG').length, 0);
     s.p5Total = p5.length;
     s.p5Dang = p5.filter(([, r]) => inP5Calc(r).open).map(([, r]) => r.may || '?');
@@ -180,6 +187,7 @@ function inSubscribe() {
     inListenerPath = path;
     inData = {};
     inP4Round = null;
+    inTaiP4CaTruoc();
     renderTabIn();
     db.ref(path).on('value', snap => {
         if (inListenerPath !== path) return;
@@ -188,6 +196,50 @@ function inSubscribe() {
         if (root && ae && root.contains(ae) && /^(INPUT|TEXTAREA)$/.test(ae.tagName) && !/checkbox|radio/.test(ae.type)) { inPendingRender = true; return; }
         renderTabIn();
     });
+}
+// Ca liền trước: ca ngày → ca đêm hôm trước; ca đêm → ca ngày cùng ngày
+function inCaTruoc() {
+    if (inShift() === 'DEM') return { d: inDate(), ca: 'NGAY' };
+    let x = new Date(inDate() + 'T00:00:00'); x.setDate(x.getDate() - 1);
+    return { d: `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`, ca: 'DEM' };
+}
+function inTaiP4CaTruoc() {
+    let t = inCaTruoc(), path = `qc_in_store_v1/${t.d}/${t.ca}/p4`;
+    inP4Truoc = null; inP4TruocPath = path;
+    if (typeof db === 'undefined' || !db) return;
+    db.ref(path).once('value').then(sn => { if (inP4TruocPath === path) { inP4Truoc = sn.val() || {}; renderTabIn(); } }).catch(() => {});
+}
+// So mã hàng của 1 máy ở vòng rd với lần kiểm trước gần nhất (trong ca, rồi tới ca liền trước).
+// Đổi sang mã mới → tra phiếu Đổi mã hàng BM-IN-01 của máy + mã đó.
+function inP4DoiMa(rd, r) {
+    if (typeof dmChuanMay !== 'function' || !r || !r.may || !r.maHang) return null;
+    let may = dmChuanMay(r.may);
+    let tim = (rounds, data, truocVong) => {
+        for (let i = rounds.length - 1; i >= 0; i--) {
+            if (truocVong && rounds[i] === truocVong) { truocVong = null; continue; }
+            if (truocVong) continue;
+            let rr = inRows(data?.rounds?.[rounds[i]]?.rows).find(([, x]) => x.maHang && dmChuanMay(x.may) === may);
+            if (rr) return { rd: rounds[i], ma: rr[1].maHang };
+        }
+        return null;
+    };
+    let rounds = IN_ROUNDS[inShift()], idx = rounds.indexOf(rd);
+    let truoc = tim(rounds.slice(0, idx), inData.p4, null);
+    let caTruoc = false;
+    if (!truoc && inP4Truoc) { truoc = tim(IN_ROUNDS[inCaTruoc().ca], inP4Truoc, null); caTruoc = !!truoc; }
+    if (!truoc) return { loai: 'dau', text: 'Chưa có lần kiểm trước để so' };
+    if (dmCungMa(truoc.ma, r.maHang)) return { loai: 'giu', truoc, caTruoc };
+    let ph = dmTimPhieuDoiMa(r.may, r.maHang);
+    if (ph && ph.p.kl === 'DAT') return { loai: 'ok', truoc, caTruoc, phieu: ph };
+    return { loai: 'vipham', truoc, caTruoc, phieu: ph };
+}
+function inP4DoiMaHtml(dm) {
+    if (!dm) return '—';
+    if (dm.loai === 'dau') return '<span class="small opacity-75">Lần đầu – chưa có vòng trước</span>';
+    let tr = `trước: <b>${inEsc(dm.truoc.ma)}</b> (${dm.caTruoc ? 'ca trước ' : ''}${inEsc(dm.truoc.rd)})`;
+    if (dm.loai === 'giu') return '<span class="small opacity-75">Giữ mã</span>';
+    if (dm.loai === 'ok') return `<span class="in-tag ok">🆕 ĐỔI MÃ ✓</span><div class="small">${tr}</div><div class="small">BM-IN-01 đạt ${inEsc(dm.phieu.p.klLuc || '')}${dm.phieu.d !== inDate() ? ' (hôm trước)' : ''}</div>`;
+    return `<span class="in-tag ng">🆕 ĐỔI MÃ – VI PHẠM</span><div class="small">${tr}</div><div class="small text-danger fw-bold">${dm.phieu ? 'Phiếu BM-IN-01 CHƯA ĐẠT mà đã chạy' : 'KHÔNG có phiếu BM-IN-01 cho máy + mã này'}</div>`;
 }
 function inStop() {
     if (inListenerPath && typeof db !== 'undefined' && db) db.ref(inListenerPath).off();
@@ -262,7 +314,7 @@ function inRenderTong(s) {
     let rules = [
         ['1', 'Chỉ cấp cốc mực còn hạn, có nhãn', s.p2Total > 0 && s.p2HetHan === 0, s.p2Total === 0 ? 'Chưa có lượt cấp mực nào' : `${s.p2HetHan} cốc quá hạn 4h đã cấp · mực khách hàng pha sẵn, không pha tại xưởng`],
         ['2', 'Không tự đổ nước vào mực', s.p4CanNuoc === 0 && s.p2DuCham === 0, `${s.p4CanNuoc} lần thấy can nước tại máy · ${s.p2DuCham} cốc đã châm đủ 3 lần (phải thay)`],
-        ['3', 'Đổi mã hàng: chỉ chạy đại trà khi phiếu BM-IN-01 đạt', s.dmCho === 0, s.dmTotal ? `${s.dmDat}/${s.dmTotal} phiếu đổi mã đã đạt · ${s.dmCho} phiếu đang chờ – máy đó chưa được chạy đại trà` : 'Chưa có phiếu đổi mã nào hôm nay'],
+        ['3', 'Đổi mã hàng: chỉ chạy đại trà khi phiếu BM-IN-01 đạt', s.dmCho === 0 && s.p4DoiMa.length === 0, [s.dmTotal ? `${s.dmDat}/${s.dmTotal} phiếu đổi mã đã đạt` : 'Chưa có phiếu đổi mã hôm nay', `QC đi kiểm phát hiện ${s.p4DoiMa.length + s.p4DoiMaOk} lần đổi mã: ${s.p4DoiMaOk} có phiếu đạt, ${s.p4DoiMa.length} VI PHẠM`].join(' · ')],
         ['4', 'Thấy lỗi là dừng máy', s.p4Ng.length === 0, s.p4Ng.length ? `${s.p4Ng.length} lần QC đi kiểm phát hiện NG – kiểm tra đã dừng máy, xử lý` : 'Không có lỗi trong ca'],
         ['5', 'Ghi phiếu đủ', s.p2Total > 0 && s.p4Done >= s.p4Rounds, `P2 ${s.p2Total} · P4 ${s.p4Done}/${s.p4Rounds} vòng`]
     ];
@@ -283,6 +335,7 @@ function inRenderTong(s) {
         <div class="col-lg-5">
             <div class="in-panel">
                 <div class="in-panel-h">⚠️ MÁY CẦN CHÚ Ý</div>
+                <div class="mb-2"><div class="small fw-bold mb-1">🆕 Đổi mã nhưng không có phiếu BM-IN-01 đạt</div>${s.p4DoiMa.length ? s.p4DoiMa.map(x => `<span class="in-chip red">Máy ${inEsc(x.may)} · ${x.rd} · ${inEsc(x.truoc)} → ${inEsc(x.ma)}${x.coPhieu ? ' (phiếu chưa đạt)' : ''}</span>`).join('') : '<span class="opacity-75 small">Không có</span>'}</div>
                 <div><div class="small fw-bold mb-1">⚠️ Máy NG khi QC đi kiểm</div>${s.p4Ng.length ? s.p4Ng.map(x => `<span class="in-chip red">Máy ${inEsc(x.may)} · ${x.rd}</span>`).join('') : '<span class="opacity-75 small">Không có</span>'}</div>
             </div>
         </div>
@@ -444,7 +497,7 @@ function inRenderP4() {
     let rows = inRows(inData.p4?.rounds?.[rd]?.rows);
     let hdr = inData.p4?.rounds?.[rd] || {};
     let html = `
-    <div class="in-note">QC đi 1 vòng / 2 giờ. Ghi <b>OK</b> hoặc <b>NG</b> cho từng máy. Có 1 ô NG → KẾT QUẢ báo NG → <b>DỪNG MÁY</b> đó, ghi rõ lỗi vào cột Ghi chú.</div>
+    <div class="in-note">QC đi 1 vòng / 2 giờ. Ghi <b>OK</b> hoặc <b>NG</b> cho từng máy. Có 1 ô NG → KẾT QUẢ báo NG → <b>DỪNG MÁY</b> đó, ghi rõ lỗi vào cột Ghi chú.<br>Cột <b>Đổi mã?</b> tự so mã hàng của từng máy với lần kiểm trước (cả ca liền trước). Máy đổi sang mã mới mà <b>không có phiếu Đổi mã hàng (BM-IN-01) đạt</b> cho đúng máy + mã → báo VI PHẠM. Ghi mã hàng đầy đủ, đúng như trên deco (chọn trong danh sách).</div>
     <div class="in-rounds">${rounds.map(x => {
         let rr = inRows(inData.p4?.rounds?.[x]?.rows);
         let done = rr.some(([, r]) => inP4Calc(r) !== ''), ng = rr.some(([, r]) => inP4Calc(r) === 'NG');
@@ -460,19 +513,21 @@ function inRenderP4() {
         </div>
     </div>
     <div class="table-responsive"><table class="table table-bordered align-middle text-center in-table" style="min-width:1080px">
-    <thead><tr><th>Máy số</th><th>Mã hàng</th>${IN_P4_COLS.map(([, t]) => `<th>${t}</th>`).join('')}<th>KẾT QUẢ (tự)</th><th>Ghi chú</th><th></th></tr></thead><tbody>`;
-    if (!rows.length) html += `<tr><td colspan="${IN_P4_COLS.length + 5}" class="opacity-75 py-3">Chưa có máy nào trong vòng ${rd}. Thêm máy hoặc lấy danh sách từ vòng trước / phiếu đổi mã.</td></tr>`;
+    <thead><tr><th>Máy số</th><th>Mã hàng</th><th>Đổi mã? (so lần trước)</th>${IN_P4_COLS.map(([, t]) => `<th>${t}</th>`).join('')}<th>KẾT QUẢ (tự)</th><th>Ghi chú</th><th></th></tr></thead><tbody>`;
+    if (!rows.length) html += `<tr><td colspan="${IN_P4_COLS.length + 6}" class="opacity-75 py-3">Chưa có máy nào trong vòng ${rd}. Thêm máy hoặc lấy danh sách từ vòng trước / phiếu đổi mã.</td></tr>`;
     rows.forEach(([id, r]) => {
-        let p = `p4/rounds/${rd}/rows/${id}`, kq = inP4Calc(r);
-        html += `<tr class="${kq === 'NG' ? 'in-row-bad' : ''}">
+        let p = `p4/rounds/${rd}/rows/${id}`, kq = inP4Calc(r), dm = inP4DoiMa(rd, r);
+        html += `<tr class="${kq === 'NG' || (dm && dm.loai === 'vipham') ? 'in-row-bad' : ''}">
             <td>${inInput(p + '/may', r.may, { cls: 'in-w60' })}</td>
-            <td>${inInput(p + '/maHang', r.maHang, { cls: 'in-w110' })}</td>
+            <td>${inInput(p + '/maHang', r.maHang, { cls: 'in-w140', attr: 'list="inMaHangList" autocomplete="off"' })}</td>
+            <td style="min-width:170px">${inP4DoiMaHtml(dm)}</td>
             ${IN_P4_COLS.map(([k]) => `<td>${inCyc(p + '/' + k, r[k], { OK: 'OK', NG: 'NG' })}</td>`).join('')}
             <td>${kq === 'OK' ? '<span class="in-tag ok">OK</span>' : kq === 'NG' ? `<span class="in-tag ng">NG</span><div class="small text-danger fw-bold mt-1">DỪNG MÁY</div>` : '—'}</td>
             <td>${inInput(p + '/ghiChu', r.ghiChu, { cls: 'in-w160' })}</td>
             <td>${inDel(p, 'máy')}</td></tr>`;
     });
-    html += `</tbody></table></div>
+    let maList = (typeof dmDeco !== 'undefined' && dmDeco.sp) ? Object.values(dmDeco.sp).filter(Boolean).map(x => `<option value="${inEsc(x.ma_san_pham)}">${inEsc(x.ten_san_pham || '')}</option>`).join('') : '';
+    html += `</tbody></table></div><datalist id="inMaHangList">${maList}</datalist>
     <div class="d-flex gap-2 mt-2"><button type="button" class="in-mini" data-act="p4AllOk">✓ Đánh OK các ô còn trống của vòng này</button></div>`;
     return html;
 }
@@ -651,6 +706,9 @@ function exportTabInExcel() {
     let yn = v => v === 'OK' ? '✓' : v === 'NG' ? '✗' : '';
     add('P2 Cap muc', head('P2 · PHIẾU CẤP MỰC & CHÂM NƯỚC').concat([['STT', 'Giờ cấp', 'Máy số', 'Màu / mã mực', 'Giờ pha', 'Còn hạn?', 'Đổ mực cũ vào can thu hồi', 'Người cấp', 'Thợ in ký nhận', 'Châm 1', 'Châm 2', 'Châm 3', 'Tổ trưởng ký', 'Ghi chú']],
         inRows(inData.p2?.rows).map(([, r], i) => { let c = inP2Calc(r); return [i + 1, r.gioCap || '', r.may || '', r.mau || '', r.gioPha || '', c.conHan == null ? '' : c.conHan ? 'Còn hạn' : 'HẾT HẠN', yn(r.doMucCu), r.nguoiCap || '', r.thoIn || '', r.cham1 || '', r.cham2 || '', r.cham3 || '', r.toTruong || '', r.ghiChu || '']; })));
+    let dmTxt = (rd, r) => { let d = inP4DoiMa(rd, r); return !d ? '' : d.loai === 'dau' ? 'Lần đầu' : d.loai === 'giu' ? 'Giữ mã' : d.loai === 'ok' ? `Đổi mã (trước: ${d.truoc.ma}) – có BM-IN-01 đạt` : `VI PHẠM: đổi mã (trước: ${d.truoc.ma}) – ${d.phieu ? 'phiếu BM-IN-01 chưa đạt' : 'không có phiếu BM-IN-01'}`; };
+    let p4 = [['Vòng', 'QC', 'Máy số', 'Mã hàng', 'Đổi mã? (so lần trước)', ...IN_P4_COLS.map(([, t]) => t), 'KẾT QUẢ', 'Ghi chú']];
+    IN_ROUNDS[inShift()].forEach(rd => { let R = inData.p4?.rounds?.[rd] || {}; inRows(R.rows).forEach(([, r]) => p4.push([rd, R.qc || '', r.may || '', r.maHang || '', dmTxt(rd, r), ...IN_P4_COLS.map(([k]) => r[k] || ''), inP4Calc(r), r.ghiChu || ''])); });
     add('P4 QC di kiem', head('P4 · PHIẾU QC ĐI KIỂM 2 GIỜ / LẦN').concat(p4));
     XLSX.writeFile(wb, `Xuong_In_${inDate()}_${inShift()}.xlsx`);
 }

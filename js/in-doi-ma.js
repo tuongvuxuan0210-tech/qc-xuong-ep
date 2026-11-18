@@ -32,6 +32,7 @@ const DM_KY = [['ktv', 'Kỹ thuật viên', 'ktv'], ['toTruong', 'Tổ trưởn
 let dmDeco = { sp: {}, cxn: {}, meta: null };
 let dmDecoBound = false, dmDecoLoaded = false;
 let dmPhieu = {}, dmPhieuPath = null, dmPhieuLoaded = false;
+let dmPhieuTruoc = {};          // phiếu đổi mã của ngày hôm trước (ca đêm chạy qua 0 giờ)
 let dmMo = null;                 // id phiếu đang mở (null = danh sách)
 let dmXem = 'ds';                // 'ds' danh sách | 'ls' lịch sử
 let dmTim = '', dmMaMoi = '', dmMayMoi = '';
@@ -111,7 +112,9 @@ function dmSubscribe() {
     let path = `${DM_PHIEU}/${inDate()}`;
     if (dmPhieuPath === path) return;
     if (dmPhieuPath) db.ref(dmPhieuPath).off();
-    dmPhieuPath = path; dmPhieu = {}; dmPhieuLoaded = false;
+    dmPhieuPath = path; dmPhieu = {}; dmPhieuLoaded = false; dmPhieuTruoc = {};
+    let homTruoc = dmNgayTruoc(inDate());
+    db.ref(`${DM_PHIEU}/${homTruoc}`).once('value').then(sn => { if (dmPhieuPath === path) { dmPhieuTruoc = sn.val() || {}; if (['tong', 'p4'].includes(inSub)) renderTabIn(); } }).catch(() => {});
     if (dmMo) dmMo = null;
     db.ref(path).on('value', snap => {
         if (dmPhieuPath !== path) return;
@@ -120,12 +123,33 @@ function dmSubscribe() {
         dmVeLai();
     }, err => inToast('⚠️ Không đọc được phiếu đổi mã: ' + (err.code || err.message), true));
 }
+// ===================== ĐỐI CHIẾU VỚI QC ĐI KIỂM 2 GIỜ =====================
+function dmNgayTruoc(d) { let x = new Date(d + 'T00:00:00'); x.setDate(x.getDate() - 1); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; }
+function dmChuanMay(m) { let s = String(m || '').toUpperCase().trim(), d = s.replace(/\D/g, ''); return d ? String(parseInt(d, 10)) : s.replace(/\s/g, ''); }
+function dmChuanMa(m) { return String(m || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+// Hai mã hàng coi là cùng mã nếu giống hệt, hoặc mã ghi tắt (≥ 4 ký tự) nằm trong mã đầy đủ: "93952" ~ "W93952-900004"
+function dmCungMa(a, b) {
+    let x = dmChuanMa(a), y = dmChuanMa(b);
+    if (!x || !y) return false;
+    if (x === y) return true;
+    let ngan = x.length < y.length ? x : y, dai = x.length < y.length ? y : x;
+    return ngan.length >= 4 && dai.includes(ngan);
+}
+// Tìm phiếu đổi mã cho máy + mã (hôm nay và hôm trước), ưu tiên phiếu đã ĐẠT, mới nhất
+function dmTimPhieuDoiMa(may, ma) {
+    let ds = [];
+    Object.entries(dmPhieu || {}).forEach(([id, p]) => { if (p && typeof p === 'object') ds.push({ id, p, d: inDate() }); });
+    Object.entries(dmPhieuTruoc || {}).forEach(([id, p]) => { if (p && typeof p === 'object') ds.push({ id, p, d: dmNgayTruoc(inDate()) }); });
+    ds = ds.filter(x => dmChuanMay(x.p.may) === dmChuanMay(may) && dmCungMa(x.p.ma, ma));
+    ds.sort((a, b) => ((b.p.kl === 'DAT') - (a.p.kl === 'DAT')) || ((b.p.t || 0) - (a.p.t || 0)));
+    return ds[0] || null;
+}
 function dmStop() {
     if (typeof db !== 'undefined' && db) {
         if (dmPhieuPath) db.ref(dmPhieuPath).off();
         if (dmDecoBound) db.ref(DM_DECO).off();
     }
-    dmPhieuPath = null; dmDecoBound = false; dmDecoLoaded = false; dmPhieuLoaded = false;
+    dmPhieuPath = null; dmDecoBound = false; dmPhieuTruoc = {}; dmDecoLoaded = false; dmPhieuLoaded = false;
     dmPhieu = {}; dmDeco = { sp: {}, cxn: {}, meta: null }; dmMo = null;
 }
 
