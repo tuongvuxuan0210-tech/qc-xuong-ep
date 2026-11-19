@@ -1,12 +1,12 @@
 /**
  * QC System - Tab 4: XƯỞNG IN TAMPON – Kiểm tra hàng ngày (Giai đoạn 1 – Cơ bản)
- * Phiếu đang dùng: P2 Cấp mực, P4 QC đi kiểm 2h, Đổi mã hàng BM-IN-01 (in-doi-ma.js). P1 Pha mực, P3 Mẫu đầu, P5 Dừng máy đã bỏ 18/11/2026.
+ * Phiếu đang dùng: P2 Cấp mực, P4 QC đi kiểm (khung giờ cố định), Đổi mã hàng BM-IN-01 (in-doi-ma.js). P1 Pha mực, P3 Mẫu đầu, P5 Dừng máy đã bỏ 18/11/2026.
  *
  * Dữ liệu Firebase: qc_in_store_v1/{YYYY-MM-DD}/{NGAY|DEM}/
  *   p1: (đã bỏ 18/11/2026 – xưởng dùng mực khách hàng pha sẵn, không pha mực; dữ liệu cũ vẫn giữ trên Firebase)
  *   p2: { header: {nguoiCap}, rows: {id: {...}} }           Phiếu cấp mực & châm nước
  *   p3: (đã bỏ 18/11/2026 – kiểm hàng đầu tiên làm ở phiếu Đổi mã hàng BM-IN-01; dữ liệu cũ vẫn giữ)
- *   p4: { rounds: { "08:00": { rows: {id: {...}} } } }      Phiếu QC đi kiểm 2 giờ
+ *   p4: { rounds: { "08:00": { rows: {id: {...}} } } }      Phiếu QC đi kiểm – khung giờ cố định (IN_ROUNDS, đổi 19/11/2026)
  *   p5: (đã bỏ 18/11/2026 – không dùng phiếu dừng máy trên phần mềm; dữ liệu cũ vẫn giữ trên Firebase)
  * Mỗi ô nhập được ghi riêng theo đường dẫn (field-level) để nhiều người nhập cùng lúc không đè nhau.
  */
@@ -24,7 +24,7 @@ const IN_RATIO_PVC = 1.2;     // nước = mực × 1,2 (nhựa PVC, nước T-1
 const IN_HAN_PHUT = 240;      // hạn dùng cốc mực: 4 giờ
 const IN_CHAM_TOI_DA = 3;     // châm tối đa 3 lần rồi thay mực
 const IN_LECH_TOI_DA = 1;     // lệch ≤ 1 g
-const IN_ROUNDS = { NGAY: ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00'], DEM: ['20:00', '22:00', '00:00', '02:00', '04:00', '06:00'] };
+const IN_ROUNDS = { NGAY: ['08:00', '13:15', '16:00'], DEM: ['20:00', '01:15', '04:00'] };
 
 const IN_P3_PREP = [
     'Phôi có tem OK, sạch',
@@ -258,7 +258,7 @@ function renderTabIn() {
     let subs = [
         ['tong', '📊 Tổng quan ca'],
         ['p2', `🥤 P2 Cấp mực <span class="badge in-cnt">${s.p2Total}</span>`],
-        ['p4', `🚶 P4 QC đi kiểm 2h <span class="badge in-cnt">${s.p4Done}/${s.p4Rounds}</span>`],
+        ['p4', `🚶 P4 QC đi kiểm <span class="badge in-cnt">${s.p4Done}/${s.p4Rounds}</span>`],
         ['dm', `🔁 Đổi mã hàng (BM-IN-01)${dmMoN ? `<span class="badge bg-warning text-dark ms-1">${dmMoN}</span>` : ''}`],
         ['deco', `📚 Danh mục deco${dmCxnN ? `<span class="badge bg-danger ms-1" title="Điểm cần xác nhận chưa xử lý">${dmCxnN}</span>` : ''}`],
         ['qt', '📖 Quy trình']
@@ -316,7 +316,7 @@ function inRenderTong(s) {
     <div class="in-kpis">
         ${kpi('Lượt cấp mực (P2)', s.p2Total, 'Giờ cấp · máy · màu/mã mực · người cấp', tone(false, false))}
         ${kpi('Đổi mã hàng (BM-IN-01)', s.dmTotal, `${s.dmDat} đạt · ${s.dmCho} đang chờ (cả ngày)`, tone(false, s.dmCho > 0))}
-        ${kpi('QC đi kiểm 2h (P4)', `${s.p4Done}/${s.p4Rounds}`, `${s.p4Ng.length} lượt máy NG`, tone(s.p4Ng.length > 0, s.p4Done < s.p4Rounds))}
+        ${kpi('QC đi kiểm (P4)', `${s.p4Done}/${s.p4Rounds}`, `${s.p4Ng.length} lượt máy NG`, tone(s.p4Ng.length > 0, s.p4Done < s.p4Rounds))}
     </div>
     <div class="row g-3 mt-1">
         <div class="col-lg-7">
@@ -477,7 +477,7 @@ function inRenderP4() {
     let rows = inRows(inData.p4?.rounds?.[rd]?.rows);
     let hdr = inData.p4?.rounds?.[rd] || {};
     let html = `
-    <div class="in-note">QC đi 1 vòng / 2 giờ. Ghi <b>OK</b> hoặc <b>NG</b> cho từng máy. Có 1 ô NG → KẾT QUẢ báo NG → <b>DỪNG MÁY</b> đó, ghi rõ lỗi vào cột Ghi chú.<br>Cột <b>Đổi mã?</b> tự so mã hàng của từng máy với lần kiểm trước (cả ca liền trước). Máy đổi sang mã mới mà <b>không có phiếu Đổi mã hàng (BM-IN-01) đạt</b> cho đúng máy + mã → báo VI PHẠM. Ghi mã hàng đầy đủ, đúng như trên deco (chọn trong danh sách).</div>
+    <div class="in-note">QC đi kiểm theo khung giờ cố định mỗi ca (xem các nút giờ bên dưới). Ghi <b>OK</b> hoặc <b>NG</b> cho từng máy. Có 1 ô NG → KẾT QUẢ báo NG → <b>DỪNG MÁY</b> đó, ghi rõ lỗi vào cột Ghi chú.<br>Cột <b>Đổi mã?</b> tự so mã hàng của từng máy với lần kiểm trước (cả ca liền trước). Máy đổi sang mã mới mà <b>không có phiếu Đổi mã hàng (BM-IN-01) đạt</b> cho đúng máy + mã → báo VI PHẠM. Ghi mã hàng đầy đủ, đúng như trên deco (chọn trong danh sách).</div>
     <div class="in-rounds">${rounds.map(x => {
         let rr = inRows(inData.p4?.rounds?.[x]?.rows);
         let done = rr.some(([, r]) => inP4Calc(r) !== ''), ng = rr.some(([, r]) => inP4Calc(r) === 'NG');
@@ -556,7 +556,7 @@ function inRenderQt() {
         ['CB-01 Mực', 'Xưởng dùng MỰC KHÁCH HÀNG PHA SẴN – không pha mực tại xưởng. Cốc mực phải có nhãn: màu / mã mực, giờ pha, HẠN (+4 giờ). Hết hạn → không cấp, đổ can thu hồi.'],
         ['CB-02 Cấp mực & khi mực đặc', 'Thợ in không tự lấy / pha mực · chỉ cấp cốc còn hạn · mực cũ đổ can thu hồi RIÊNG, cấm đổ vào cốc mới · tại máy KHÔNG có can nước · mực đặc: tổ trưởng châm 1 lọ, gạch 1 vạch, tối đa 3 lần rồi thay cốc · in thử 3 sp sau mỗi lần châm.'],
         ['CB-03 Đổi mã hàng – kiểm hàng đầu tiên', 'Mỗi lần đổi mã: lập phiếu BM-IN-01 → ① kỹ thuật viên chuẩn bị, lắp đặt đủ từng bước in theo deco, đếm nét → ② tổ trưởng tự đếm lại nét → ③ QC kiểm 5 SP đầu, sấy – nguội – thử băng keo → ĐẠT mới chạy đại trà. Không đạt → trả kỹ thuật viên làm lại.'],
-        ['CB-04 In loạt – sấy – QC đi kiểm', 'Đeo găng cả ca · 30 phút soi nét 1 lần · KHÔNG tự chỉnh áp lực, KHÔNG để can nước, KHÔNG chạm tay chỗ in · xếp khay 1 lớp, sấy: PVC dẻo 50–55 °C, PVC cứng / ABS 55–60 °C, 20–30 phút, nguội ≥ 30 phút · QC 2 giờ / vòng (P4).'],
+        ['CB-04 In loạt – sấy – QC đi kiểm', 'Đeo găng cả ca · 30 phút soi nét 1 lần · KHÔNG tự chỉnh áp lực, KHÔNG để can nước, KHÔNG chạm tay chỗ in · xếp khay 1 lớp, sấy: PVC dẻo 50–55 °C, PVC cứng / ABS 55–60 °C, 20–30 phút, nguội ≥ 30 phút · QC đi kiểm theo khung giờ cố định: ca ngày 08:00, 13:15, 16:00 · ca đêm 20:00, 01:15, 04:00 (P4).'],
         ['CB-06 Kiểm hàng & xuất', 'Chỉ hàng khô đủ 24 giờ và QC kiểm đạt (CS-IN-06) mới đóng gói, xuất · kho kiểm phiếu QC đạt, đủ 24 giờ, đúng số lượng (CS-IN-07).']
     ];
     return `<div class="in-note">Tóm tắt bộ quy trình Giai đoạn 1 – Cơ bản (GD1_Co_ban_xuong_in). Mục tiêu: cả xưởng làm đều 5 việc gốc trước khi chuyển Giai đoạn 2.</div>
@@ -689,7 +689,7 @@ function exportTabInExcel() {
     let dmTxt = (rd, r) => { let d = inP4DoiMa(rd, r); return !d ? '' : d.loai === 'dau' ? 'Lần đầu' : d.loai === 'giu' ? 'Giữ mã' : d.loai === 'ok' ? `Đổi mã (trước: ${d.truoc.ma}) – có BM-IN-01 đạt` : `VI PHẠM: đổi mã (trước: ${d.truoc.ma}) – ${d.phieu ? 'phiếu BM-IN-01 chưa đạt' : 'không có phiếu BM-IN-01'}`; };
     let p4 = [['Vòng', 'QC', 'Máy số', 'Mã hàng', 'Đổi mã? (so lần trước)', ...IN_P4_COLS.map(([, t]) => t), 'KẾT QUẢ', 'Ghi chú']];
     IN_ROUNDS[inShift()].forEach(rd => { let R = inData.p4?.rounds?.[rd] || {}; inRows(R.rows).forEach(([, r]) => p4.push([rd, R.qc || '', r.may || '', r.maHang || '', dmTxt(rd, r), ...IN_P4_COLS.map(([k]) => r[k] || ''), inP4Calc(r), r.ghiChu || ''])); });
-    add('P4 QC di kiem', head('P4 · PHIẾU QC ĐI KIỂM 2 GIỜ / LẦN').concat(p4));
+    add('P4 QC di kiem', head('P4 · PHIẾU QC ĐI KIỂM THEO KHUNG GIỜ CỐ ĐỊNH').concat(p4));
     XLSX.writeFile(wb, `Xuong_In_${inDate()}_${inShift()}.xlsx`);
 }
 
