@@ -25,6 +25,7 @@ const DK_PATH_KHUON_TAY = 'qc_khuon_tay_v1';   // mã khuôn QC nhập tay khi P
 let dkKhuonTay = {};
 const DK_HAN_PHUT = 30;          // hạn hoàn thành tính từ đầu ca / lúc đổi khuôn / đầu khung giờ / lúc chụp ảnh lỗi
 const DK_TICK_MS = 120000;       // chu kỳ kiểm tra của bộ nhắc
+const DK_HAN_2H_PHUT = 15;        // kiểm SP 2h: QC làm lúc nào trong khung cũng được -> chỉ nhắc khi HẾT khung + 15 phút vẫn chưa có kết quả (19/11 anh Tưởng)
 const DK_TIN_QUA_HAN_PHUT = 180;  // tin chờ quá lâu (máy gửi Zalo tắt) thì bỏ, không gửi muộn
 const DK_CAU_NOI_TRE_PHUT = 10;   // quá số phút này không thấy máy gửi Zalo -> cảnh báo trên Tab 6
 
@@ -937,13 +938,54 @@ function dkApDungVit() {
 
 // ===================== 7. BỘ NHẮC VIỆC ZALO =====================
 // Xếp 1 tin vào hộp chờ gửi Zalo (máy Hải Tân AI Control sẽ lấy và gửi vào nhóm)
-function dkXepTinZalo(maNhom, text) {
+function dk2hDaKiem(rec) { return !!(rec && (parseInt(rec.totalCheck) || 0) > 0); }
+
+function dkSoanTinNhac(p) {
+    let msg = p.dau;
+    if (p.dk && p.dk.length) msg += `\n🔧 Chưa xác nhận ĐIỀU KIỆN ÉP (quá ${DK_HAN_PHUT} phút):\n` + p.dk.join('\n');
+    if (p.h2 && p.h2.length) msg += `\n📋 Chưa kiểm SP định kỳ 2 giờ/lần (đã hết khung giờ):\n` + p.h2.join('\n');
+    if (p.m4 && p.m4.length) msg += `\n🚨 Có ảnh lỗi nhưng chưa có đối sách 4M:\n` + p.m4.join('\n');
+    return msg + `\n👉 QC vui lòng cập nhật ngay trên phần mềm QC.`;
+}
+
+// Ngay trước khi gửi (tin có thể nằm chờ lâu khi máy gửi Zalo tắt): bỏ các máy QC đã nhập kết quả kiểm 2h.
+// Trả về text mới, hoặc '' nếu không còn việc gì để nhắc.
+async function dkLamMoiTinNhac(t) {
+    let p = t && t.phan;
+    if (!p) {
+        // Tin do máy chưa cập nhật bản mới xếp (luật cũ: nhắc 2h ngay sau 30 phút đầu khung) -> bỏ phần 2h đó,
+        // máy gửi Zalo (bản mới) sẽ tự nhắc lại đúng luật khi hết khung mà vẫn chưa có kết quả.
+        let text = String((t && t.text) || '');
+        if (!text.includes('2 giờ/lần (quá')) return text;
+        let dong = text.split('\n'), ra = [], bo = false;
+        for (let d of dong) {
+            if (d.includes('2 giờ/lần (quá')) { bo = true; continue; }
+            if (bo && /^\s+•/.test(d)) continue;
+            bo = false; ra.push(d);
+        }
+        return /🔧|🚨/.test(ra.join('\n')) ? ra.join('\n') : '';
+    }
+    if (!Array.isArray(p.kiem2h) || !p.kiem2h.length) return t.text;
+    let cache = {}, h2 = [];
+    for (let g of p.kiem2h) {
+        if (!cache[g.date]) cache[g.date] = (await db.ref(`qc_tab2_store_v1/${g.date}`).once('value')).val() || {};
+        let con = (g.may || []).filter(x => !dk2hDaKiem(cache[g.date][x.k]));
+        if (con.length) h2.push(`  • ${g.nhan}: ${con.map(x => x.ten).join(', ')}`);
+    }
+    let q = Object.assign({}, p, { h2 });
+    if (!(q.dk || []).length && !h2.length && !(q.m4 || []).length) return '';
+    return dkSoanTinNhac(q).substring(0, 2500);
+}
+
+function dkXepTinZalo(maNhom, text, phan) {
     let nhom = DK_NHOM_ZALO[maNhom];
     if (!nhom || !db) return Promise.reject(new Error('Thiếu nhóm Zalo'));
-    return db.ref(`${DK_PATH_NHAC}/${dkCaHienTai().date}/gui`).push({
+    let tin = {
         nhom: nhom.ma, tenNhom: nhom.nhom, text: String(text).substring(0, 2500), at: Date.now(),
         by: (currentUser && currentUser.email) || '', tt: 'cho', lan: 0
-    });
+    };
+    if (phan) tin.phan = JSON.parse(JSON.stringify(phan));
+    return db.ref(`${DK_PATH_NHAC}/${dkCaHienTai().date}/gui`).push(tin);
 }
 
 async function dkNhacGiuCho(date, id, now) {
@@ -970,10 +1012,18 @@ async function dkNhacTick() {
         let ungVien = [];   // { id, nhom, loai, dong }
 
         if (typeof mesSyncActive !== 'undefined' && mesSyncActive) {
-            // Khung giờ kiểm 2h hiện tại
+            // Khung kiểm 2h VỪA KẾT THÚC (khung đang chạy chưa tính: QC kiểm lúc nào trong khung cũng là đúng giờ).
+            // Khung đầu ca -> xét khung cuối của ca trước (vd 7h30-9h30 ca ngày -> xét 5h30-7h30 ca đêm hôm trước).
             let slots = ca === 'Ca Ngày' ? QC_SLOTS_DAY : QC_SLOTS_NIGHT;
             let idx = Math.min(slots.length - 1, Math.max(0, Math.floor((now - ht.batDau) / 7200000)));
-            let slot = slots[idx], slotBatDau = ht.batDau + idx * 7200000;
+            let k2 = { date, ca, t2 };
+            if (idx >= 1) { k2.slot = slots[idx - 1]; k2.batDau = ht.batDau + (idx - 1) * 7200000; }
+            else {
+                let tr = dkCaHienTai(new Date(ht.batDau - 60000)), sl = tr.ca === 'Ca Ngày' ? QC_SLOTS_DAY : QC_SLOTS_NIGHT;
+                k2 = { date: tr.date, ca: tr.ca, slot: sl[sl.length - 1], batDau: tr.batDau + (sl.length - 1) * 7200000,
+                       t2: tr.date === date ? t2 : await doc(`qc_tab2_store_v1/${tr.date}`) };
+            }
+            let xet2h = now > k2.batDau + 7200000 + DK_HAN_2H_PHUT * 60000;
             let thieu2h = { X1: [], X2: [] };
 
             for (let m = 1; m <= TOTAL_MACHINES; m++) {
@@ -999,14 +1049,20 @@ async function dkNhacTick() {
                     if (!daNhac(id)) ungVien.push({ id, nhom, loai: 'dk',
                         dong: `  • ${dkTenMay(m)} – khuôn ${mold}` + (cur.prev ? ` (đổi khuôn lúc ${dkGio(cur.since)})` : '') + (dkLayChuan(mold, m) ? '' : (dkLayChuanGoc(mold, m) ? ` – 📋 chưa có bản riêng, kiểm theo bản gốc ${dkTenMay(dkLayChuanGoc(mold, m).m)} (kỹ thuật cần lập bản cho ${dkTenMay(m)})` : ' – ⚠️ chưa có bản điều kiện chuẩn')) });
                 }
-                // (b) Kiểm SP định kỳ 2 giờ/lần
-                let rec2 = t2[`${key}_${slot}`];
-                if (!(rec2 && (parseInt(rec2.totalCheck) || 0) > 0) && now > slotBatDau + DK_HAN_PHUT * 60000) thieu2h[nhom].push(`${dkTenMay(m)}`);
+            }
+            // (b) Kiểm SP định kỳ 2 giờ/lần – khung vừa hết
+            if (xet2h) for (let m = 1; m <= TOTAL_MACHINES; m++) {
+                let mold2 = dkKhuonDangChay(k2.date, m, k2.ca);
+                if (!mold2) continue;
+                let k = `M${m}_${k2.ca}_${k2.slot}`;
+                if (!dk2hDaKiem(k2.t2[k])) thieu2h[dkNhomTheoMay(m).ma].push({ ten: dkTenMay(m), k });
             }
             ['X1', 'X2'].forEach(nhom => {
                 if (!thieu2h[nhom].length) return;
-                let id = `2H_${ca}_${slot}_${nhom}`;
-                if (!daNhac(id)) ungVien.push({ id, nhom, loai: 'h2', dong: `  • Khung ${getSlotRangeText(slot)}: ${thieu2h[nhom].join(', ')}` });
+                let id = `2H_${k2.date}_${k2.ca}_${k2.slot}_${nhom}`;
+                let nhan = `Khung ${getSlotRangeText(k2.slot)}` + (k2.date !== date || k2.ca !== ca ? ` (${k2.ca} ${dkNgayNgan(k2.date)})` : '');
+                if (!daNhac(id)) ungVien.push({ id, nhom, loai: 'h2', dong: `  • ${nhan}: ${thieu2h[nhom].map(x => x.ten).join(', ')}`,
+                    kiem: { date: k2.date, nhan, may: thieu2h[nhom] } });
             });
             dkNhacNgay = nhac;
         }
@@ -1033,17 +1089,13 @@ async function dkNhacTick() {
         });
 
         for (let u of ungVien) {
-            if (await dkNhacGiuCho(date, u.id, now)) viec[u.nhom][u.loai].push(u.dong);
+            if (await dkNhacGiuCho(date, u.id, now)) { viec[u.nhom][u.loai].push(u.dong); if (u.kiem) (viec[u.nhom].kiem2h = viec[u.nhom].kiem2h || []).push(u.kiem); }
         }
         for (let ma of ['X1', 'X2']) {
             let v = viec[ma], nhom = DK_NHOM_ZALO[ma];
             if (!v.dk.length && !v.h2.length && !v.m4.length) continue;
-            let msg = `⏰ [NHẮC VIỆC QC – ${nhom.xuong}]\n📅 ${dkNgayNgan(date)} · ${ca} · ${dkGio(now)}`;
-            if (v.dk.length) msg += `\n🔧 Chưa xác nhận ĐIỀU KIỆN ÉP (quá ${DK_HAN_PHUT} phút):\n` + v.dk.join('\n');
-            if (v.h2.length) msg += `\n📋 Chưa kiểm SP định kỳ 2 giờ/lần (quá ${DK_HAN_PHUT} phút):\n` + v.h2.join('\n');
-            if (v.m4.length) msg += `\n🚨 Có ảnh lỗi nhưng chưa có đối sách 4M:\n` + v.m4.join('\n');
-            msg += `\n👉 QC vui lòng cập nhật ngay trên phần mềm QC.`;
-            await dkXepTinZalo(ma, msg);
+            let phan = { dau: `⏰ [NHẮC VIỆC QC – ${nhom.xuong}]\n📅 ${dkNgayNgan(date)} · ${ca} · ${dkGio(now)}`, dk: v.dk, h2: v.h2, m4: v.m4, kiem2h: v.kiem2h || [] };
+            await dkXepTinZalo(ma, dkSoanTinNhac(phan), phan);
         }
         let cn = await doc(`${DK_PATH_NHAC}/cau_noi`);
         dkCauNoiLuc = cn.at || 0;
@@ -1096,7 +1148,11 @@ async function qcCauNoiChay(tenMay) {
                 if (!(c.tt === 'cho' || (c.tt === 'dang_gui' && now - (c.lay || 0) > 15 * 60000))) return undefined;
                 c.tt = 'dang_gui'; c.lay = now; return c;
             });
-            if (r.committed) tin.push({ date, id, nhom: t.nhom, tenNhom: t.tenNhom, text: t.text });
+            if (!r.committed) continue;
+            let text = t.text;
+            try { text = await dkLamMoiTinNhac(r.snapshot.val() || t); } catch (e) { text = t.text; }
+            if (!text) { await ref.update({ tt: 'het_viec', xongLuc: now }); continue; }   // QC đã làm xong trước khi gửi -> không gửi
+            tin.push({ date, id, nhom: t.nhom, tenNhom: t.tenNhom, text });
         }
     }
     await db.ref(`${DK_PATH_NHAC}/cau_noi`).set({ at: now, may: String(tenMay || 'AI Control').substring(0, 60) });
