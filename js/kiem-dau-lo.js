@@ -83,6 +83,28 @@ function faiPhieuMoiNhat(date, m, ca, mold) {
     ds.sort((a, b) => (b.taoLuc || 0) - (a.taoLuc || 0));
     return ds[0] || null;
 }
+// 19/11 anh Tưởng: khuôn đã xếp trên PM ép nhựa nhưng máy CHƯA CHẠY -> QC bấm "⏸ Chưa chạy" trên phiếu:
+// không nhắc Zalo (hàng đầu tiên / điều kiện ép / kiểm 2h), không khóa Tab 2 cho tới khi bấm "▶ Đã chạy"
+// hoặc QC nhập kiểm 2 giờ cho máy đó (tự hiểu là máy đã chạy -> tính lại hạn 30 phút từ lúc đó).
+function faiDangChoChay(date, m, ca, mold) {
+    let p = faiPhieuMoiNhat(date, m, ca, mold);
+    return !!(p && p.trangThai === 'cho' && p.chuaChay);
+}
+function faiDoiChuaChay(date, id) {
+    if (!checkAuthOrAlert() || !db) return;
+    let r = (faiStore[date] || {})[id];
+    if (!r || r.trangThai !== 'cho') return;
+    let ai = (currentUser && currentUser.email) || '';
+    if (r.chuaChay) {
+        if (!confirm(`${qcTenMayDu(r.may)} · ${r.moldId}: máy ĐÃ BẮT ĐẦU CHẠY?\nHạn kiểm hàng đầu tiên ${FAI_HAN_PHUT} phút tính từ bây giờ.`)) return;
+        db.ref(`${FAI_PATH}/${date}/${id}`).update({ chuaChay: null, taoLuc: Date.now(), batDauChay: { luc: Date.now(), boi: ai } })
+            .catch(e => alert('❌ Không lưu được: ' + e.message));
+    } else {
+        if (!confirm(`${qcTenMayDu(r.may)} · ${r.moldId}: khuôn mới xếp trên PM ép nhựa, máy CHƯA CHẠY?\n→ Tạm ngừng nhắc Zalo và không khóa Tab 2. Khi máy chạy bấm "▶ Đã chạy" (hoặc nhập kiểm 2 giờ là tự kích hoạt lại).`)) return;
+        db.ref(`${FAI_PATH}/${date}/${id}`).update({ chuaChay: { luc: Date.now(), boi: ai } })
+            .catch(e => alert('❌ Không lưu được: ' + e.message));
+    }
+}
 
 // ===================== 1. ĐƠN HÀNG TỪ PM ÉP NHỰA =====================
 // Đơn đang chạy của khuôn: ưu tiên đơn giao đúng máy, chưa xong, không tạm dừng; mới nhất trước
@@ -221,9 +243,19 @@ async function faiTick() {
         let act = await faiDoc(`qc_tab3_actions_v1/${date}`);
         faiAct[date] = act;
         let viec = { X1: { cho: [], m4: [] }, X2: { cho: [], m4: [] } };
+        let t2Nay = null;
         for (let id of Object.keys(ds)) {
             let r = ds[id];
             if (!r || !r.may || r.ca !== ca) continue;
+            if (r.trangThai === 'cho' && r.chuaChay) {
+                // Đã có kiểm 2 giờ của máy ở khung bắt đầu sau lúc báo "chưa chạy" -> máy đã chạy: kích hoạt lại phiếu
+                if (!t2Nay) t2Nay = await faiDoc(`qc_tab2_store_v1/${date}`);
+                let slots = ca === 'Ca Ngày' ? QC_SLOTS_DAY : QC_SLOTS_NIGHT;
+                let daChay = slots.some((sl, i) => ht.batDau + (i + 1) * 7200000 > (r.chuaChay.luc || 0)
+                    && (parseInt((t2Nay[`M${r.may}_${ca}_${sl}`] || {}).totalCheck) || 0) > 0);
+                if (daChay) await db.ref(`${FAI_PATH}/${date}/${id}`).update({ chuaChay: null, taoLuc: now, batDauChay: { luc: now, boi: 'tự động (có kiểm 2 giờ)' } });
+                continue;
+            }
             // phiếu của khuôn không còn chạy trên máy -> bỏ qua
             if (r.trangThai === 'cho' && dkKhuonDangChay(date, r.may, ca) && dkKhuonDangChay(date, r.may, ca) !== r.moldId) continue;
             let nhom = faiNhom(r.may).ma;
@@ -262,6 +294,7 @@ function faiLyDoChanTab2(date, m, ca, mold) {
     if (!faiStore[date]) return '';            // chưa tải xong -> không chặn nhầm
     let p = faiPhieuMoiNhat(date, m, ca, mold);
     if (!p || p.trangThai === 'dat') return '';   // không thay khuôn -> không cần phiếu
+    if (p.trangThai === 'cho' && p.chuaChay) return '';   // QC báo máy chưa chạy khuôn này
     if (p.trangThai === 'khong_dat') return '🔒 Hàng đầu tiên KHÔNG ĐẠT – chỉnh máy rồi kiểm lại (Tab 7)';
     return '🔒 Chờ KIỂM HÀNG ĐẦU TIÊN (Tab 7)';
 }
@@ -365,6 +398,7 @@ function faiRender() {
         if (r.trangThai === 'dat') tt = '<span class="badge bg-success px-2 py-2">✅ ĐẠT</span>';
         else if (r.trangThai === 'khong_dat') tt = '<span class="badge bg-danger px-2 py-2">❌ KHÔNG ĐẠT</span>'
             + (qcDu4M(act[`FAI_${r.id}_4m`]) ? '<br><small class="text-success">4M ✓</small>' : '<br><small class="text-warning">chưa có 4M</small>');
+        else if (r.chuaChay) tt = `<span class="badge bg-secondary px-2 py-2">⏸ Máy chưa chạy</span><br><small class="opacity-75">QC báo ${dkGio(r.chuaChay.luc || 0)}</small>`;
         else tt = (now > (r.taoLuc || 0) + FAI_HAN_PHUT * 60000 && faiCa(r.date, r.ca))
             ? `<span class="badge bg-danger px-2 py-2">⏰ QUÁ HẠN (${dkGio((r.taoLuc || 0) + FAI_HAN_PHUT * 60000)})</span>`
             : '<span class="badge bg-warning text-dark px-2 py-2">⏳ Chờ kiểm</span>';
@@ -380,6 +414,7 @@ function faiRender() {
             <td class="small">${qc}</td>
             <td class="text-nowrap">
                 <button type="button" class="btn btn-sm ${r.trangThai === 'cho' ? 'btn-3d-emerald' : 'btn-outline-info'} py-0 px-2" onclick="faiMoPhieu('${r.date}', '${r.id}')">${r.trangThai === 'cho' ? '📝 Kiểm' : '👁️ Xem'}</button>
+                ${r.trangThai === 'cho' ? `<button type="button" class="btn btn-sm ${r.chuaChay ? 'btn-success' : 'btn-outline-warning'} py-0 px-2" onclick="faiDoiChuaChay('${r.date}', '${r.id}')" title="${r.chuaChay ? 'Máy đã bắt đầu chạy khuôn này' : 'Khuôn mới xếp trên PM ép nhựa, máy chưa chạy: tạm ngừng nhắc + không khóa Tab 2'}">${r.chuaChay ? '▶ Đã chạy' : '⏸ Chưa chạy'}</button>` : ''}
                 <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="faiIn('${r.date}', '${r.id}')" title="In phiếu khổ A5">🖨️</button>
                 ${r.trangThai === 'khong_dat' ? `<button type="button" class="btn btn-sm btn-outline-danger py-0 px-2" onclick="faiMo4M('${r.date}', '${r.id}')" title="Đối sách 4M">4M</button>` : ''}
                 <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2" onclick="faiXoaPhieu('${r.date}', '${r.id}')" title="Xóa phiếu tạo nhầm">🗑️</button>
@@ -389,8 +424,8 @@ function faiRender() {
     if (tb) tb.innerHTML = html || `<tr><td colspan="8" class="small fst-italic">Chưa có phiếu nào trong ngày${faiStore[faiXem.date] ? '' : ' (đang tải…)'}.</td></tr>`;
     let th = document.getElementById('faiTongHop');
     if (th) {
-        let dat = ds.filter(r => r.trangThai === 'dat').length, kd = ds.filter(r => r.trangThai === 'khong_dat').length, cho = ds.length - dat - kd;
-        th.innerHTML = `Tổng ${ds.length} · <span class="text-success">Đạt ${dat}</span> · <span class="text-danger">Không đạt ${kd}</span> · <span class="text-warning">Chờ ${cho}</span>`;
+        let dat = ds.filter(r => r.trangThai === 'dat').length, kd = ds.filter(r => r.trangThai === 'khong_dat').length, cho = ds.length - dat - kd, cc = ds.filter(r => r.trangThai === 'cho' && r.chuaChay).length;
+        th.innerHTML = `Tổng ${ds.length} · <span class="text-success">Đạt ${dat}</span> · <span class="text-danger">Không đạt ${kd}</span> · <span class="text-warning">Chờ ${cho - cc}</span>` + (cc ? ` · <span class="opacity-75">Chưa chạy ${cc}</span>` : '');
     }
 }
 

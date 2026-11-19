@@ -1029,6 +1029,7 @@ async function dkNhacTick() {
             for (let m = 1; m <= TOTAL_MACHINES; m++) {
                 let mold = dkKhuonDangChay(date, m, ca);
                 if (!mold) continue;
+                if (typeof faiDangChoChay === 'function' && faiDangChoChay(date, m, ca, mold)) continue;   // QC báo máy chưa chạy khuôn này
                 let key = `M${m}_${ca}`, nhom = dkNhomTheoMay(m).ma;
                 let cur = nhac.cur[key];
                 if (!cur || cur.mold !== mold) {
@@ -1054,6 +1055,7 @@ async function dkNhacTick() {
             if (xet2h) for (let m = 1; m <= TOTAL_MACHINES; m++) {
                 let mold2 = dkKhuonDangChay(k2.date, m, k2.ca);
                 if (!mold2) continue;
+                if (typeof faiDangChoChay === 'function') { if (typeof faiNghe === 'function') faiNghe(k2.date); if (faiDangChoChay(k2.date, m, k2.ca, mold2)) continue; }
                 let k = `M${m}_${k2.ca}_${k2.slot}`;
                 if (!dk2hDaKiem(k2.t2[k])) thieu2h[dkNhomTheoMay(m).ma].push({ ten: dkTenMay(m), k });
             }
