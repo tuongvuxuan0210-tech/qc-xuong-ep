@@ -87,6 +87,7 @@ function faiPhieuMoiNhat(date, m, ca, mold) {
 // không nhắc Zalo (hàng đầu tiên / điều kiện ép / kiểm 2h), không khóa Tab 2 cho tới khi bấm "▶ Đã chạy"
 // hoặc QC nhập kiểm 2 giờ cho máy đó (tự hiểu là máy đã chạy -> tính lại hạn 30 phút từ lúc đó).
 function faiDangChoChay(date, m, ca, mold) {
+    if (typeof qcTrangThaiMayMes === 'function' && qcTrangThaiMayMes(date, m, ca, mold) === 'PAUSED') return true;   // PM ép nhựa: Tạm Dừng
     let p = faiPhieuMoiNhat(date, m, ca, mold);
     return !!(p && p.trangThai === 'cho' && p.chuaChay);
 }
@@ -247,6 +248,16 @@ async function faiTick() {
         for (let id of Object.keys(ds)) {
             let r = ds[id];
             if (!r || !r.may || r.ca !== ca) continue;
+            // PM ép nhựa báo máy TẠM DỪNG -> phiếu chuyển "chưa chạy"; báo ĐANG CHẠY lại -> kích hoạt, hạn 30 phút tính từ lúc đó
+            let ttMes = (r.trangThai === 'cho' && typeof qcTrangThaiMayMes === 'function') ? qcTrangThaiMayMes(date, r.may, ca, r.moldId) : '';
+            if (r.trangThai === 'cho' && ttMes === 'PAUSED') {
+                if (!r.chuaChay) await db.ref(`${FAI_PATH}/${date}/${id}`).update({ chuaChay: { luc: now, boi: 'PM ép nhựa: Tạm Dừng', tuMes: true } });
+                continue;
+            }
+            if (r.trangThai === 'cho' && r.chuaChay && r.chuaChay.tuMes && ttMes === 'RUNNING') {
+                await db.ref(`${FAI_PATH}/${date}/${id}`).update({ chuaChay: null, taoLuc: now, batDauChay: { luc: now, boi: 'PM ép nhựa: Đang Chạy' } });
+                continue;
+            }
             if (r.trangThai === 'cho' && r.chuaChay) {
                 // Đã có kiểm 2 giờ của máy ở khung bắt đầu sau lúc báo "chưa chạy" -> máy đã chạy: kích hoạt lại phiếu
                 if (!t2Nay) t2Nay = await faiDoc(`qc_tab2_store_v1/${date}`);
@@ -398,7 +409,7 @@ function faiRender() {
         if (r.trangThai === 'dat') tt = '<span class="badge bg-success px-2 py-2">✅ ĐẠT</span>';
         else if (r.trangThai === 'khong_dat') tt = '<span class="badge bg-danger px-2 py-2">❌ KHÔNG ĐẠT</span>'
             + (qcDu4M(act[`FAI_${r.id}_4m`]) ? '<br><small class="text-success">4M ✓</small>' : '<br><small class="text-warning">chưa có 4M</small>');
-        else if (r.chuaChay) tt = `<span class="badge bg-secondary px-2 py-2">⏸ Máy chưa chạy</span><br><small class="opacity-75">QC báo ${dkGio(r.chuaChay.luc || 0)}</small>`;
+        else if (r.chuaChay) tt = `<span class="badge bg-secondary px-2 py-2">⏸ ${r.chuaChay.tuMes ? 'Máy tạm dừng' : 'Máy chưa chạy'}</span><br><small class="opacity-75">${r.chuaChay.tuMes ? 'theo PM ép nhựa' : 'QC báo'} ${dkGio(r.chuaChay.luc || 0)}</small>`;
         else tt = (now > (r.taoLuc || 0) + FAI_HAN_PHUT * 60000 && faiCa(r.date, r.ca))
             ? `<span class="badge bg-danger px-2 py-2">⏰ QUÁ HẠN (${dkGio((r.taoLuc || 0) + FAI_HAN_PHUT * 60000)})</span>`
             : '<span class="badge bg-warning text-dark px-2 py-2">⏳ Chờ kiểm</span>';

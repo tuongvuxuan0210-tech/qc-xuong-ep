@@ -113,6 +113,23 @@
             return (Array.isArray(recs) ? recs : Object.values(recs)).filter(r => r && typeof r === 'object');
         }
 
+        // Trạng thái máy theo PM ép nhựa (bảng Thống kê máy & ca): 'RUNNING' / 'PAUSED' / '' (không rõ).
+        // Ưu tiên tín hiệu realtime machine_status_map_v1 (giống PM); sau đó trạng thái ghi trên lượt chạy – chỉ tin khi lượt
+        // đó được cập nhật trong chính ca này (PM tự đóng dấu PAUSED cho lượt của ca khác lúc lưu nên không dùng được).
+        function qcTrangThaiMayMes(date, machineId, shiftName, moldId) {
+            let m = parseInt(machineId) || 0, sh = String(shiftName).includes('Đêm') ? 'Đêm' : 'Ngày';
+            let map = (typeof mesTrangThaiMay !== 'undefined' && mesTrangThaiMay) || {};
+            let v = (moldId && map[`${m}_${sh}_${moldId}`]) || map[`${m}_${sh}`];
+            if (v) return String(v).toUpperCase().includes('PAUSE') || v === 'Tạm Dừng' ? 'PAUSED' : 'RUNNING';
+            let rec = qcProdRecs(date, m).filter(r => qcShiftMatch(r, shiftName) && (!moldId || r.moldId === moldId)).pop();
+            if (rec && rec.status && typeof dkCaHienTai === 'function') {
+                let ht = dkCaHienTai();
+                if (ht.date === date && ht.ca === shiftName && Number(rec._updatedAt) >= ht.batDau)
+                    return String(rec.status).toUpperCase().includes('PAUSE') ? 'PAUSED' : 'RUNNING';
+            }
+            return '';
+        }
+
         function qcShiftMatch(r, shiftName) {
             return r.shift === shiftName || (shiftName === 'Ca Ngày' && r.shift === 'Ngày') || (shiftName === 'Ca Đêm' && r.shift === 'Đêm');
         }

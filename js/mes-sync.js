@@ -54,6 +54,18 @@ let mesState = { status: 'off', message: '', lastSync: null };
 let mesConnectModalInstance = null;
 let mesLoiLienTiep = 0;
 let mesThuLaiTimer = null;
+// 19/11: trạng thái máy "Đang Chạy / Tạm Dừng" của PM ép nhựa (bảng Thống kê máy & ca – node machine_status_map_v1,
+// khóa `${máy}_${Ngày|Đêm}_${mã khuôn}` hoặc `${máy}_${Ngày|Đêm}` → 'RUNNING' / 'PAUSED'). Đọc riêng, lỗi không ảnh hưởng gì.
+const MES_KEY_TRANG_THAI = 'machine_status_map_v1';
+let mesTrangThaiMay = {};
+let mesTrangThaiCo = false;
+async function mesTaiTrangThaiMay() {
+    try {
+        const d = await mesRpc('mes_read_nodes', { p_keys: [MES_KEY_TRANG_THAI] });
+        const v = d && d[MES_KEY_TRANG_THAI] && d[MES_KEY_TRANG_THAI].value;
+        if (v && typeof v === 'object') { mesTrangThaiMay = v; mesTrangThaiCo = true; }
+    } catch (e) { console.warn('PM ép nhựa - không đọc được trạng thái máy:', (e && (e.message || e.code)) || e); }
+}
 // Đơn hàng (khách hàng, mã đơn, màu, nhựa) – dùng cho phiếu kiểm hàng đầu tiên (Tab 7). Đọc riêng, 5 phút/lần;
 // lỗi ở đây không ảnh hưởng việc đồng bộ mã khuôn.
 const MES_KEY_ORDERS = ['mold_orders_v12_mes_clean', 'mold_planned_orders_v12_mes_clean'];
@@ -207,7 +219,7 @@ async function mesRefresh(full) {
             const st = await mesRpc('mes_versions', { p_keys: MES_KEYS });
             const versions = (st && st.versions) || {};
             keys = MES_KEYS.filter(k => versions[k] === undefined || String(versions[k] && versions[k].revision !== undefined ? versions[k].revision : versions[k]) !== String(mesRevisions[k]));
-            if (!keys.length) { mesSetState('ok', ''); return; }
+            if (!keys.length) { mesSetState('ok', ''); await mesTaiTrangThaiMay(); return; }
         }
         const data = await mesRpc('mes_read_nodes', { p_keys: keys });
         if (!mesRunning) return;
@@ -220,6 +232,7 @@ async function mesRefresh(full) {
         mesSetState('ok', '');
         mesLoiLienTiep = 0;
         mesTaiDonHang(false);
+        await mesTaiTrangThaiMay();
     } catch (e) {
         console.warn('PM ép nhựa - lỗi đọc dữ liệu:', (e && (e.message || e.code)) || e);
         mesSetState('error', mesLaLoiMang(e) ? 'Mất kết nối máy chủ MES – đang thử lại' : mesRpcError(e));
