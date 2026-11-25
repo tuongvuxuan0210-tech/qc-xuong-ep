@@ -23,7 +23,7 @@ const PQ_TAB_IN = '#tab4XuongIn';
 
 let pqData = { admins: {}, users: {} };
 let pqBound = false;
-let pqDaGhiLanCuoi = false;
+let pqLanCuoiChoEmail = null; // email đã ghi "lần đăng nhập cuối" gần nhất – để ghi lại khi đổi sang tài khoản khác
 
 function pqKhoaEmail(email) { return String(email || '').trim().toLowerCase().replace(/[.#$\[\]\/]/g, '_'); }
 function pqEmailHienTai() { try { return (firebase.auth().currentUser || {}).email || ''; } catch (e) { return ''; } }
@@ -48,23 +48,31 @@ function pqKiemMay(m) {
         `Máy ${qcTenMay(m)} thuộc ${PQ_TEN_XUONG[xm]} – không thao tác được.\nNếu cần đổi xưởng, liên hệ Admin.`;
 }
 
+// Áp lại quyền (ẩn/hiện tab, ghi "lần cuối", cập nhật xưởng mặc định...) theo tài khoản ĐANG đăng nhập hiện tại.
+// Gọi lại hàm này mỗi lần có người đăng nhập, kể cả khi listener phân quyền đã gắn sẵn từ phiên trước
+// (vd. 2 người dùng chung 1 máy/trình duyệt, người sau đăng nhập đè lên mà không bấm "Đăng xuất" trước,
+// hoặc đăng xuất rồi đăng nhập lại quá nhanh) – nếu không, giao diện sẽ bị kẹt theo quyền của tài khoản trước.
+function pqApLaiChoTaiKhoanHienTai() {
+    if (pqKiemConHieuLuc()) return;
+    pqGhiLanCuoi();
+    pqApDungTab();
+    if (typeof faiApXuongMacDinh === 'function') faiApXuongMacDinh();
+    if (typeof faiRender === 'function') faiRender();
+    if (document.getElementById('pqModal')) pqVeBang();
+}
 function pqKhoiDong() {
-    if (!db || pqBound) return;
+    if (!db) return;
+    if (pqBound) { pqApLaiChoTaiKhoanHienTai(); return; }
     pqBound = true;
     db.ref(PQ_PATH).on('value', s => {
         let v = s.val() || {};
         pqData = { admins: v.admins || {}, users: v.users || {} };
-        if (pqKiemConHieuLuc()) return;
-        pqGhiLanCuoi();
-        pqApDungTab();
-        if (typeof faiApXuongMacDinh === 'function') faiApXuongMacDinh();
-        if (typeof faiRender === 'function') faiRender();
-        if (document.getElementById('pqModal')) pqVeBang();
+        pqApLaiChoTaiKhoanHienTai();
     }, err => { console.warn('Không đọc được phân quyền', err); pqBound = false; });
 }
 function pqStop() {
     if (db) { try { db.ref(PQ_PATH).off(); } catch (e) {} }
-    pqBound = false; pqDaGhiLanCuoi = false;
+    pqBound = false; pqLanCuoiChoEmail = null;
     pqData = { admins: {}, users: {} };
     pqApDungTab();
 }
@@ -96,10 +104,10 @@ function pqKiemConHieuLuc() {
 }
 // Ghi lại tài khoản vừa đăng nhập để Admin thấy trong danh sách mà gán xưởng
 function pqGhiLanCuoi() {
-    if (pqDaGhiLanCuoi || !db) return;
+    if (!db) return;
     let email = pqEmailHienTai();
-    if (!email) return;
-    pqDaGhiLanCuoi = true;
+    if (!email || pqLanCuoiChoEmail === email) return;
+    pqLanCuoiChoEmail = email;
     let k = pqKhoaEmail(email);
     if (!(pqData.users || {})[k]) return;
     db.ref(`${PQ_PATH}/users/${k}`).update({ lanCuoi: Date.now() }).catch(e => console.warn('Không ghi được lần đăng nhập', e));
