@@ -471,22 +471,30 @@ function inRenderP3() {
 }
 
 // ---------- P4 QC ĐI KIỂM ----------
+// Vòng "đến hạn" hiện tại: vòng gần nhất đã qua và còn trong vòng 120 phút kể từ giờ chuẩn của nó.
+function inP4ExpectedRound(rounds) {
+    rounds = rounds || IN_ROUNDS[inShift()];
+    return rounds.slice().reverse().find(rd => { let d = inDiffMin(rd, inNowHM()); return d != null && d < 120; }) || rounds[0];
+}
+
 function inRenderP4() {
     let rounds = IN_ROUNDS[inShift()];
     if (!inP4Round || !rounds.includes(inP4Round)) {
         let now = inToMin(inNowHM());
-        inP4Round = rounds.slice().reverse().find(rd => { let d = inDiffMin(rd, inNowHM()); return d != null && d < 120; }) || rounds[0];
+        inP4Round = inP4ExpectedRound(rounds);
         if (now == null) inP4Round = rounds[0];
     }
     let rd = inP4Round;
     let rows = inRows(inData.p4?.rounds?.[rd]?.rows);
     let hdr = inData.p4?.rounds?.[rd] || {};
+    let expectedRound = inP4ExpectedRound(rounds);
     let html = `
-    <div class="in-note">QC đi kiểm theo khung giờ cố định mỗi ca (xem các nút giờ bên dưới). Ghi <b>OK</b> hoặc <b>NG</b> cho từng máy. Có 1 ô NG → KẾT QUẢ báo NG → <b>DỪNG MÁY</b> đó, ghi rõ lỗi vào cột Ghi chú.<br>Cột <b>Đổi mã?</b> tự so mã hàng của từng máy với lần kiểm trước (cả ca liền trước). Máy đổi sang mã mới mà <b>không có phiếu Đổi mã hàng (BM-IN-01) đạt</b> cho đúng máy + mã → báo VI PHẠM. Ghi mã hàng đầy đủ, đúng như trên deco (chọn trong danh sách).</div>
+    <div class="in-note">QC đi kiểm theo khung giờ cố định mỗi ca (xem các nút giờ bên dưới). Ghi <b>OK</b> hoặc <b>NG</b> cho từng máy. Có 1 ô NG → KẾT QUẢ báo NG → <b>DỪNG MÁY</b> đó, ghi rõ lỗi vào cột Ghi chú.<br>Cột <b>Đổi mã?</b> tự so mã hàng của từng máy với lần kiểm trước (cả ca liền trước). Máy đổi sang mã mới mà <b>không có phiếu Đổi mã hàng (BM-IN-01) đạt</b> cho đúng máy + mã → báo VI PHẠM. Ghi mã hàng đầy đủ, đúng như trên deco (chọn trong danh sách). Vòng đã có kết quả và không còn trong khung giờ hiện tại sẽ tự <b>khóa 🔒</b>, không sửa được nữa.</div>
     <div class="in-rounds">${rounds.map(x => {
         let rr = inRows(inData.p4?.rounds?.[x]?.rows);
         let done = rr.some(([, r]) => inP4Calc(r) !== ''), ng = rr.some(([, r]) => inP4Calc(r) === 'NG');
-        return `<button type="button" class="in-round ${x === rd ? 'active' : ''} ${ng ? 'ng' : done ? 'ok' : ''}" data-act="round" data-v="${x}">⏰ ${x}${ng ? ' ✗' : done ? ' ✓' : ''}</button>`;
+        let locked = done && x !== expectedRound;
+        return `<button type="button" class="in-round ${x === rd ? 'active' : ''} ${ng ? 'ng' : done ? 'ok' : ''}" data-act="round" data-v="${x}" ${locked ? 'style="opacity:.55;cursor:not-allowed;" title="Đã quá khung giờ – khóa, không thể mở lại để sửa"' : ''}">⏰ ${x}${ng ? ' ✗' : done ? ' ✓' : ''}${locked ? ' 🔒' : ''}</button>`;
     }).join('')}</div>
     <div class="in-head">
         <label>QC vòng ${rd} ${inInput(`p4/rounds/${rd}/qc`, hdr.qc || '', { cls: 'in-w140', ph: inUser() })}</label>
@@ -498,8 +506,8 @@ function inRenderP4() {
         </div>
     </div>
     <div class="table-responsive"><table class="table table-bordered align-middle text-center in-table" style="min-width:1080px">
-    <thead><tr><th>Máy số</th><th>Mã hàng</th><th>Đổi mã? (so lần trước)</th>${IN_P4_COLS.map(([, t]) => `<th>${t}</th>`).join('')}<th>KẾT QUẢ (tự)</th><th>Ghi chú</th><th></th></tr></thead><tbody>`;
-    if (!rows.length) html += `<tr><td colspan="${IN_P4_COLS.length + 6}" class="opacity-75 py-3">Chưa có máy nào trong vòng ${rd}. Thêm máy hoặc lấy danh sách từ vòng trước / phiếu đổi mã.</td></tr>`;
+    <thead><tr><th>Máy số</th><th>Mã hàng</th><th>Đổi mã? (so lần trước)</th>${IN_P4_COLS.map(([, t]) => `<th>${t}</th>`).join('')}<th>KẾT QUẢ (tự)</th><th>Ảnh lỗi</th><th>Ghi chú</th><th></th></tr></thead><tbody>`;
+    if (!rows.length) html += `<tr><td colspan="${IN_P4_COLS.length + 7}" class="opacity-75 py-3">Chưa có máy nào trong vòng ${rd}. Thêm máy hoặc lấy danh sách từ vòng trước / phiếu đổi mã.</td></tr>`;
     rows.forEach(([id, r]) => {
         let p = `p4/rounds/${rd}/rows/${id}`, kq = inP4Calc(r), dm = inP4DoiMa(rd, r);
         html += `<tr class="${kq === 'NG' || (dm && dm.loai === 'vipham') ? 'in-row-bad' : ''}">
@@ -508,6 +516,7 @@ function inRenderP4() {
             <td style="min-width:170px">${inP4DoiMaHtml(dm)}</td>
             ${IN_P4_COLS.map(([k]) => `<td>${inCyc(p + '/' + k, r[k], { OK: 'OK', NG: 'NG' })}</td>`).join('')}
             <td>${kq === 'OK' ? '<span class="in-tag ok">OK</span>' : kq === 'NG' ? `<span class="in-tag ng">NG</span><div class="small text-danger fw-bold mt-1">DỪNG MÁY</div>` : '—'}</td>
+            <td style="min-width:110px">${inP4ImgCell(p, r, rd)}</td>
             <td>${inInput(p + '/ghiChu', r.ghiChu, { cls: 'in-w160' })}</td>
             <td>${inDel(p, 'máy')}</td></tr>`;
     });
@@ -515,6 +524,93 @@ function inRenderP4() {
     html += `</tbody></table></div><datalist id="inMaHangList">${maList}</datalist>
     <div class="d-flex gap-2 mt-2"><button type="button" class="in-mini" data-act="p4AllOk">✓ Đánh OK các ô còn trống của vòng này</button></div>`;
     return html;
+}
+
+// Ảnh lỗi NG cho P4 (QC đi kiểm) — tái dùng compressImage()/previewDefectImage() của image-service.js,
+// ghi qua inWrite() để vào đúng nhánh p4/rounds/{rd}/rows/{id} của xưởng in.
+function inP4ImgCell(p, r, rd) {
+    let imgUrl = r.img || '', driveUrl = r.driveUrl || '', driveFile = r.driveFile || '';
+    let title = `Máy ${inEsc(r.may || '-')} (${inEsc(inDate())} ${inEsc(inShift())} - vòng ${inEsc(rd)}) - Mã: ${inEsc(r.maHang || '-')}`;
+    if (imgUrl) {
+        return `<div class="d-flex align-items-center justify-content-center gap-1">
+            <img src="${inEsc(imgUrl)}" class="rounded border border-info shadow-sm" style="width:28px;height:28px;object-fit:cover;cursor:pointer;" onclick="previewDefectImage('${inEsc(imgUrl)}', '${title}')" title="Bấm để xem ảnh">
+            <div class="btn-group btn-group-sm">
+                <label class="btn btn-xs btn-outline-warning py-0 px-1 m-0" style="font-size:9px;cursor:pointer;" title="Đổi ảnh">
+                    🔄<input type="file" accept="image/*" style="display:none;" onchange="handleInP4DefectImageUpload(this, '${p}', '${inEsc(r.may)}', '${inEsc(r.maHang)}')">
+                </label>
+                <button type="button" class="btn btn-xs btn-outline-danger py-0 px-1" style="font-size:9px;" onclick="removeInP4DefectImage('${p}')" title="Xóa ảnh">🗑️</button>
+            </div>
+        </div>`;
+    } else if (driveUrl || driveFile) {
+        let viewTarget = driveUrl || driveFile;
+        return `<div class="d-flex align-items-center justify-content-center gap-1">
+            <button type="button" class="btn btn-xs btn-3d-primary rounded-pill py-0 px-2 shadow-sm" style="font-size:9.5px;" onclick="previewDefectImage('${inEsc(viewTarget)}', '${title}')" title="Bấm để xem ảnh">🖼️ Xem</button>
+            <label class="btn btn-xs btn-outline-warning py-0 px-1 m-0" style="font-size:9px;cursor:pointer;" title="Tải ảnh mới / Đổi ảnh">
+                🔄<input type="file" accept="image/*" style="display:none;" onchange="handleInP4DefectImageUpload(this, '${p}', '${inEsc(r.may)}', '${inEsc(r.maHang)}')">
+            </label>
+            <button type="button" class="btn btn-xs btn-outline-danger py-0 px-1" style="font-size:9px;" onclick="removeInP4DefectImage('${p}')" title="Xóa ảnh lỗi">🗑️</button>
+        </div>`;
+    }
+    return `<label class="btn btn-xs btn-outline-info rounded-pill py-0 px-2 shadow-sm" style="font-size:10px;cursor:pointer;" title="Chụp / Tải ảnh lỗi NG">
+        📸 Ảnh
+        <input type="file" accept="image/*" style="display:none;" onchange="handleInP4DefectImageUpload(this, '${p}', '${inEsc(r.may)}', '${inEsc(r.maHang)}')">
+    </label>`;
+}
+
+async function handleInP4DefectImageUpload(inputEl, path, may, maHang) {
+    if (typeof checkAuthOrAlert === 'function' && !checkAuthOrAlert()) return;
+    if (!inputEl.files || !inputEl.files[0]) return;
+    const file = inputEl.files[0];
+    try {
+        const compressedBase64 = await compressImage(file);
+        const sizeKB = Math.round((compressedBase64.length * 0.75) / 1024);
+        let parts = path.split('/'); // p4/rounds/{rd}/rows/{id}
+        let rd = parts[2] || '', id = parts[4] || '';
+        let fileName = `QC_IN_P4_M${may || 'MAY'}_${maHang || 'MAHANG'}_${inDate()}_${inShift()}_${rd}_${id}.jpg`;
+
+        inWrite(path + '/img', compressedBase64);
+        inWrite(path + '/driveFile', fileName);
+
+        if (typeof ZALO_WEBHOOK_URL !== 'undefined' && ZALO_WEBHOOK_URL && !ZALO_WEBHOOK_URL.includes('URL_GOOGLE_APPS_SCRIPT')) {
+            try {
+                fetch(ZALO_WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({
+                        action: 'upload_to_drive',
+                        folderId: (typeof GOOGLE_DRIVE_FOLDER_ID !== 'undefined') ? GOOGLE_DRIVE_FOLDER_ID : undefined,
+                        fileName: fileName,
+                        fileData: compressedBase64.split(',')[1] || compressedBase64,
+                        mimeType: 'image/jpeg',
+                        sendToZalo: false,
+                        date: inDate(),
+                        machine: `M${may || ''}`,
+                        moldId: maHang
+                    })
+                }).then(r => r.json()).then(resData => {
+                    if (resData && resData.fileUrl) {
+                        inWrite(path + '/driveUrl', resData.fileUrl);
+                        renderTabIn();
+                    }
+                }).catch(() => { });
+            } catch (e) { }
+        }
+
+        renderTabIn();
+        inToast(`✅ Đã lưu ảnh lỗi (${sizeKB} KB)`);
+    } catch (err) {
+        inToast('⚠️ Lỗi tải ảnh: ' + (err && err.message ? err.message : err), true);
+    }
+}
+
+function removeInP4DefectImage(path) {
+    if (typeof checkAuthOrAlert === 'function' && !checkAuthOrAlert()) return;
+    if (!confirm('Bạn có chắc chắn muốn xóa ảnh lỗi này?')) return;
+    inWrite(path + '/img', null);
+    inWrite(path + '/driveFile', null);
+    inWrite(path + '/driveUrl', null);
+    renderTabIn();
+    inToast('🗑️ Đã xóa ảnh lỗi');
 }
 
 // ---------- P5 DỪNG MÁY ----------
@@ -596,7 +692,20 @@ function inOnClick(e) {
     let t = Date.now();
     switch (act) {
         case 'sub': inSub = v; break;
-        case 'round': inP4Round = v; break;
+        case 'round': {
+            // Chống bấm nhầm khung giờ: vòng đã có kết quả và không còn là vòng đến hạn hiện tại thì
+            // KHÓA CỨNG (không hỏi lại bằng confirm, tránh thao tác viên bấm nhầm "Đồng ý" trên hộp thoại),
+            // chỉ báo bằng toast rồi dừng, không cho mở để sửa đè lên kết quả cũ.
+            if (v !== inP4Round) {
+                let hasDataChk = inRows(inData.p4?.rounds?.[v]?.rows).some(([, r]) => inP4Calc(r) !== '');
+                if (hasDataChk && v !== inP4ExpectedRound()) {
+                    inToast(`🔒 Vòng ${v} đã quá khung giờ và đã có kết quả – khóa, không thể mở lại để sửa.`, true);
+                    return;
+                }
+            }
+            inP4Round = v;
+            break;
+        }
         case 'cyc': {
             let cur = inGet(path);
             inWrite(path, !cur ? 'OK' : cur === 'OK' ? 'NG' : null);
