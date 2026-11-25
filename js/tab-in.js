@@ -249,6 +249,8 @@ function renderTabIn() {
     let ae = document.activeElement, focusP = null;
     if (ae && root.contains(ae)) ['data-p', 'data-dmp', 'data-dmf', 'data-dmcxn'].some(a => { let v = ae.getAttribute(a); if (v) focusP = [a, v]; return !!v; });
     let st = (ae && focusP && ae.selectionStart != null) ? ae.selectionStart : null;
+    // Giữ nguyên vị trí cuộn trang: vẽ lại (vd. sau khi bấm nút OK/NG) không được làm trang nhảy lên đầu.
+    let scrollX = window.scrollX, scrollY = window.scrollY;
     inPendingRender = false;
     if (typeof dmSubscribe === 'function') dmSubscribe();
     let s = inSummary();
@@ -272,8 +274,11 @@ function renderTabIn() {
     root.innerHTML = nav + `<div class="in-body">${body}</div>`;
     if (focusP) {
         let el = root.querySelector(`[${focusP[0]}="${CSS.escape(focusP[1])}"]`);
-        if (el) { el.focus(); try { if (st != null && el.setSelectionRange) el.setSelectionRange(st, st); } catch (e) { } }
+        if (el) { try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); } try { if (st != null && el.setSelectionRange) el.setSelectionRange(st, st); } catch (e) { } }
     }
+    if (scrollX !== window.scrollX || scrollY !== window.scrollY) window.scrollTo(scrollX, scrollY);
+    // Một số trình duyệt di động tự cuộn về đầu trang ở khung hình kế tiếp (sau khi bàn phím ảo đóng) – ép lại vị trí cuộn 1 lần nữa cho chắc.
+    requestAnimationFrame(() => { if (scrollX !== window.scrollX || scrollY !== window.scrollY) window.scrollTo(scrollX, scrollY); });
 }
 
 function inCyc(path, val, labels) {

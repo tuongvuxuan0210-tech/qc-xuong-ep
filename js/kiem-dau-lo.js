@@ -84,8 +84,9 @@ function faiPhieuMoiNhat(date, m, ca, mold) {
     return ds[0] || null;
 }
 // 19/11 anh Tưởng: khuôn đã xếp trên PM ép nhựa nhưng máy CHƯA CHẠY -> QC bấm "⏸ Chưa chạy" trên phiếu:
-// không nhắc Zalo (hàng đầu tiên / điều kiện ép / kiểm 2h), không khóa Tab 2 cho tới khi bấm "▶ Đã chạy"
-// hoặc QC nhập kiểm 2 giờ cho máy đó (tự hiểu là máy đã chạy -> tính lại hạn 30 phút từ lúc đó).
+// không nhắc Zalo (hàng đầu tiên / điều kiện ép / kiểm 2h), không khóa Tab 2 cho tới khi QC tự bấm "▶ Đã chạy".
+// 25/11: bỏ 2 cách tự động chuyển lại "đã chạy" (PM ép nhựa báo chạy lại / QC lỡ nhập kiểm 2 giờ) -
+// giờ CHỈ chuyển lại khi QC chủ động bấm "▶ Đã chạy" sau khi đã kiểm tra hàng đầu tiên xong.
 function faiDangChoChay(date, m, ca, mold) {
     if (typeof qcTrangThaiMayMes === 'function' && qcTrangThaiMayMes(date, m, ca, mold) === 'PAUSED') return true;   // PM ép nhựa: Tạm Dừng
     let p = faiPhieuMoiNhat(date, m, ca, mold);
@@ -101,7 +102,7 @@ function faiDoiChuaChay(date, id) {
         db.ref(`${FAI_PATH}/${date}/${id}`).update({ chuaChay: null, taoLuc: Date.now(), batDauChay: { luc: Date.now(), boi: ai } })
             .catch(e => alert('❌ Không lưu được: ' + e.message));
     } else {
-        if (!confirm(`${qcTenMayDu(r.may)} · ${r.moldId}: khuôn mới xếp trên PM ép nhựa, máy CHƯA CHẠY?\n→ Tạm ngừng nhắc Zalo và không khóa Tab 2. Khi máy chạy bấm "▶ Đã chạy" (hoặc nhập kiểm 2 giờ là tự kích hoạt lại).`)) return;
+        if (!confirm(`${qcTenMayDu(r.may)} · ${r.moldId}: khuôn mới xếp trên PM ép nhựa, máy CHƯA CHẠY?\n→ Tạm ngừng nhắc Zalo và không khóa Tab 2. Khi máy chạy, QC phải tự bấm "▶ Đã chạy" mới kích hoạt lại (không tự động).`)) return;
         db.ref(`${FAI_PATH}/${date}/${id}`).update({ chuaChay: { luc: Date.now(), boi: ai } })
             .catch(e => alert('❌ Không lưu được: ' + e.message));
     }
@@ -244,29 +245,18 @@ async function faiTick() {
         let act = await faiDoc(`qc_tab3_actions_v1/${date}`);
         faiAct[date] = act;
         let viec = { X1: { cho: [], m4: [] }, X2: { cho: [], m4: [] } };
-        let t2Nay = null;
         for (let id of Object.keys(ds)) {
             let r = ds[id];
             if (!r || !r.may || r.ca !== ca) continue;
-            // PM ép nhựa báo máy TẠM DỪNG -> phiếu chuyển "chưa chạy"; báo ĐANG CHẠY lại -> kích hoạt, hạn 30 phút tính từ lúc đó
+            // PM ép nhựa báo máy TẠM DỪNG -> phiếu chuyển "chưa chạy" (tạm ngưng nhắc).
+            // Chuyển lại "đã chạy" nay CHỈ làm THỦ CÔNG qua nút "▶ Đã chạy" (faiDoiChuaChay) -
+            // không còn tự động kích hoạt lại dù PM ép nhựa báo "Đang Chạy" hay QC lỡ nhập kiểm 2 giờ.
             let ttMes = (r.trangThai === 'cho' && typeof qcTrangThaiMayMes === 'function') ? qcTrangThaiMayMes(date, r.may, ca, r.moldId) : '';
             if (r.trangThai === 'cho' && ttMes === 'PAUSED') {
                 if (!r.chuaChay) await db.ref(`${FAI_PATH}/${date}/${id}`).update({ chuaChay: { luc: now, boi: 'PM ép nhựa: Tạm Dừng', tuMes: true } });
                 continue;
             }
-            if (r.trangThai === 'cho' && r.chuaChay && r.chuaChay.tuMes && ttMes === 'RUNNING') {
-                await db.ref(`${FAI_PATH}/${date}/${id}`).update({ chuaChay: null, taoLuc: now, batDauChay: { luc: now, boi: 'PM ép nhựa: Đang Chạy' } });
-                continue;
-            }
-            if (r.trangThai === 'cho' && r.chuaChay) {
-                // Đã có kiểm 2 giờ của máy ở khung bắt đầu sau lúc báo "chưa chạy" -> máy đã chạy: kích hoạt lại phiếu
-                if (!t2Nay) t2Nay = await faiDoc(`qc_tab2_store_v1/${date}`);
-                let slots = ca === 'Ca Ngày' ? QC_SLOTS_DAY : QC_SLOTS_NIGHT;
-                let daChay = slots.some((sl, i) => ht.batDau + (i + 1) * 7200000 > (r.chuaChay.luc || 0)
-                    && (parseInt((t2Nay[`M${r.may}_${ca}_${sl}`] || {}).totalCheck) || 0) > 0);
-                if (daChay) await db.ref(`${FAI_PATH}/${date}/${id}`).update({ chuaChay: null, taoLuc: now, batDauChay: { luc: now, boi: 'tự động (có kiểm 2 giờ)' } });
-                continue;
-            }
+            if (r.trangThai === 'cho' && r.chuaChay) continue;   // đang chờ QC tự bấm "▶ Đã chạy" sau khi kiểm tra xong
             // phiếu của khuôn không còn chạy trên máy -> bỏ qua
             if (r.trangThai === 'cho' && dkKhuonDangChay(date, r.may, ca) && dkKhuonDangChay(date, r.may, ca) !== r.moldId) continue;
             let nhom = faiNhom(r.may).ma;
