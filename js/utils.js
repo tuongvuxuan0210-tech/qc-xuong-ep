@@ -98,11 +98,22 @@
         //  3) Chủ nhật không tự sinh lượt chạy.
         // Khi chưa kết nối PM thì giữ mã khuôn đã lưu trước đây.
         let qcPrevProdDateCache = {};
-        function qcPrevSavedProdDate(date) {
+        // machineId (tuỳ chọn): nếu có, chỉ tính các ngày mà ĐÚNG máy này có lượt chạy được lưu.
+        // Bắt buộc phải lọc theo từng máy: có ngày Xưởng 2 vẫn ghi sản lượng đều nhưng Xưởng 1
+        // lại chưa kịp lưu hôm đó -> nếu chỉ lấy "ngày gần nhất có dữ liệu bất kỳ máy nào" sẽ
+        // dừng nhầm ở ngày đó rồi báo trống, bỏ qua mất ngày xa hơn mà máy này thực sự có dữ liệu.
+        function qcPrevSavedProdDate(date, machineId) {
             if (qcPrevProdDateCache.__src !== prodDataMap) qcPrevProdDateCache = { __src: prodDataMap };
-            if (date in qcPrevProdDateCache) return qcPrevProdDateCache[date];
-            let ds = Object.keys(prodDataMap || {}).filter(d => d < date && prodDataMap[d] && Object.keys(prodDataMap[d]).length > 0).sort();
-            return (qcPrevProdDateCache[date] = ds.length ? ds[ds.length - 1] : null);
+            let cacheKey = (machineId === undefined || machineId === null || machineId === '') ? date : (date + '|' + machineId);
+            if (cacheKey in qcPrevProdDateCache) return qcPrevProdDateCache[cacheKey];
+            let ds = Object.keys(prodDataMap || {}).filter(d => {
+                if (!(d < date) || !prodDataMap[d]) return false;
+                if (machineId === undefined || machineId === null || machineId === '') {
+                    return Object.keys(prodDataMap[d]).length > 0;
+                }
+                return qcProdRecs(d, machineId).length > 0;
+            }).sort();
+            return (qcPrevProdDateCache[cacheKey] = ds.length ? ds[ds.length - 1] : null);
         }
 
         function qcProdRecs(date, machineId) {
@@ -111,23 +122,6 @@
             let recs = day[machineId] || day[String(machineId)];
             if (!recs) return [];
             return (Array.isArray(recs) ? recs : Object.values(recs)).filter(r => r && typeof r === 'object');
-        }
-
-        // Trạng thái máy theo PM ép nhựa (bảng Thống kê máy & ca): 'RUNNING' / 'PAUSED' / '' (không rõ).
-        // Ưu tiên tín hiệu realtime machine_status_map_v1 (giống PM); sau đó trạng thái ghi trên lượt chạy – chỉ tin khi lượt
-        // đó được cập nhật trong chính ca này (PM tự đóng dấu PAUSED cho lượt của ca khác lúc lưu nên không dùng được).
-        function qcTrangThaiMayMes(date, machineId, shiftName, moldId) {
-            let m = parseInt(machineId) || 0, sh = String(shiftName).includes('Đêm') ? 'Đêm' : 'Ngày';
-            let map = (typeof mesTrangThaiMay !== 'undefined' && mesTrangThaiMay) || {};
-            let v = (moldId && map[`${m}_${sh}_${moldId}`]) || map[`${m}_${sh}`];
-            if (v) return String(v).toUpperCase().includes('PAUSE') || v === 'Tạm Dừng' ? 'PAUSED' : 'RUNNING';
-            let rec = qcProdRecs(date, m).filter(r => qcShiftMatch(r, shiftName) && (!moldId || r.moldId === moldId)).pop();
-            if (rec && rec.status && typeof dkCaHienTai === 'function') {
-                let ht = dkCaHienTai();
-                if (ht.date === date && ht.ca === shiftName && Number(rec._updatedAt) >= ht.batDau)
-                    return String(rec.status).toUpperCase().includes('PAUSE') ? 'PAUSED' : 'RUNNING';
-            }
-            return '';
         }
 
         function qcShiftMatch(r, shiftName) {
@@ -148,7 +142,7 @@
             let parts = String(date).split('-');
             let isSunday = parts.length === 3 && new Date(+parts[0], +parts[1] - 1, +parts[2]).getDay() === 0;
             if (isSunday) return { mold: '', fromMes: true, inherited: false };
-            let prev = qcPrevSavedProdDate(date);
+            let prev = qcPrevSavedProdDate(date, m);
             let prevRecs = prev ? qcProdRecs(prev, m) : [];
             if (!prevRecs.length) return { mold: '', fromMes: true, inherited: false };
             let pDay = prevRecs.find(r => r.shift === 'Ngày'), pNight = prevRecs.find(r => r.shift === 'Đêm');
