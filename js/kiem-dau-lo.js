@@ -32,6 +32,16 @@ const FAI_LY_DO = {
     sua_khuon: { ten: 'Sửa khuôn',            zh: '' },
     chay_lai:  { ten: 'Chạy lại',             zh: '' }
 };
+// Lý do máy chưa chạy / dừng máy (QC bấm "⏸ Chưa chạy") -> gửi cảnh báo Zalo ngay khi chọn
+const FAI_LY_DO_DUNG_MAY = {
+    hong_may:     { ten: 'Hỏng máy' },
+    het_nhua:     { ten: 'Hết nhựa' },
+    cho_khuon:    { ten: 'Chờ khuôn / thay khuôn' },
+    mat_dien:     { ten: 'Mất điện / sự cố điện' },
+    cho_ky_thuat: { ten: 'Chờ kỹ thuật viên / bảo trì' },
+    sai_mau:      { ten: 'Dừng xử lý sai màu' },
+    het_ca:       { ten: 'Hết giờ ca / hết việc' }
+};
 // 5 mục kiểm cố định của mẫu giấy
 const FAI_MUC = [
     { ma: 'ngoai',  ten: 'Ngoại quan', zh: '外观' },
@@ -102,10 +112,46 @@ function faiDoiChuaChay(date, id) {
         db.ref(`${FAI_PATH}/${date}/${id}`).update({ chuaChay: null, taoLuc: Date.now(), batDauChay: { luc: Date.now(), boi: ai } })
             .catch(e => alert('❌ Không lưu được: ' + e.message));
     } else {
-        if (!confirm(`${qcTenMayDu(r.may)} · ${r.moldId}: khuôn mới xếp trên PM ép nhựa, máy CHƯA CHẠY?\n→ Tạm ngừng nhắc Zalo và không khóa Tab 2. Khi máy chạy, QC phải tự bấm "▶ Đã chạy" mới kích hoạt lại (không tự động).`)) return;
-        db.ref(`${FAI_PATH}/${date}/${id}`).update({ chuaChay: { luc: Date.now(), boi: ai } })
-            .catch(e => alert('❌ Không lưu được: ' + e.message));
+        faiMoChonLyDoDungMay(date, id);
     }
+}
+
+// Chọn lý do máy chưa chạy / dừng máy: hiện bảng chọn (không dùng confirm để tránh bấm nhầm),
+// lưu lý do rồi gửi cảnh báo Zalo ngay.
+function faiMoChonLyDoDungMay(date, id) {
+    if (!checkAuthOrAlert() || !db) return;
+    let r = (faiStore[date] || {})[id];
+    if (!r || r.trangThai !== 'cho') return;
+    let el = dkTaoModal('faiLyDoDungMayModal', '⏸ LÝ DO MÁY CHƯA CHẠY / DỪNG MÁY', '',
+        `<button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3" data-bs-dismiss="modal">Hủy</button>`);
+    document.getElementById('faiLyDoDungMayModalBody').innerHTML = `
+        <div class="small mb-2 opacity-75">${qcTenMayDu(r.may)} · Khuôn ${r.moldId} – chọn lý do, hệ thống gửi cảnh báo Zalo ngay sau khi chọn.
+            Tạm ngừng nhắc kiểm hàng đầu tiên và không khóa Tab 2 cho tới khi QC bấm "▶ Đã chạy".</div>
+        <div class="d-grid gap-2">
+            ${Object.keys(FAI_LY_DO_DUNG_MAY).map(k =>
+                `<button type="button" class="btn btn-outline-warning text-start" onclick="faiXacNhanDungMay('${date}','${id}','${k}')">⏸ ${FAI_LY_DO_DUNG_MAY[k].ten}</button>`
+            ).join('')}
+        </div>`;
+    bootstrap.Modal.getOrCreateInstance(el).show();
+}
+
+// Xác nhận lý do (gọi từ nút trong bảng chọn) -> lưu chuaChay kèm lý do + gửi Zalo cảnh báo ngay
+function faiXacNhanDungMay(date, id, lyDoKey) {
+    if (!checkAuthOrAlert() || !db) return;
+    let r = (faiStore[date] || {})[id];
+    if (!r) return;
+    let ai = (currentUser && currentUser.email) || '';
+    let ten = (FAI_LY_DO_DUNG_MAY[lyDoKey] || {}).ten || lyDoKey;
+    db.ref(`${FAI_PATH}/${date}/${id}`).update({ chuaChay: { luc: Date.now(), boi: ai, lyDoDungMay: lyDoKey } })
+        .then(() => {
+            let modalEl = document.getElementById('faiLyDoDungMayModal');
+            if (modalEl) bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+            let nhom = faiNhom(r.may);
+            dkXepTinZalo(nhom.ma, `⏸ [MÁY DỪNG – ${nhom.xuong}]\n📅 ${dkNgayNgan(date)} · ${r.ca} · ${qcTenMay(r.may)} · Khuôn ${r.moldId}\n` +
+                `🔸 Lý do: ${ten}\n👤 QC báo: ${ai}\n👉 Tạm ngừng nhắc kiểm hàng đầu tiên cho đến khi QC bấm "▶ Đã chạy".`)
+                .catch(e => console.warn('Không xếp được tin Zalo:', e));
+        })
+        .catch(e => alert('❌ Không lưu được: ' + e.message));
 }
 
 // ===================== 1. ĐƠN HÀNG TỪ PM ÉP NHỰA =====================
@@ -399,7 +445,7 @@ function faiRender() {
         if (r.trangThai === 'dat') tt = '<span class="badge bg-success px-2 py-2">✅ ĐẠT</span>';
         else if (r.trangThai === 'khong_dat') tt = '<span class="badge bg-danger px-2 py-2">❌ KHÔNG ĐẠT</span>'
             + (qcDu4M(act[`FAI_${r.id}_4m`]) ? '<br><small class="text-success">4M ✓</small>' : '<br><small class="text-warning">chưa có 4M</small>');
-        else if (r.chuaChay) tt = `<span class="badge bg-secondary px-2 py-2">⏸ ${r.chuaChay.tuMes ? 'Máy tạm dừng' : 'Máy chưa chạy'}</span><br><small class="opacity-75">${r.chuaChay.tuMes ? 'theo PM ép nhựa' : 'QC báo'} ${dkGio(r.chuaChay.luc || 0)}</small>`;
+        else if (r.chuaChay) tt = `<span class="badge bg-secondary px-2 py-2">⏸ ${r.chuaChay.tuMes ? 'Máy tạm dừng' : 'Máy chưa chạy'}</span><br><small class="opacity-75">${r.chuaChay.lyDoDungMay ? (FAI_LY_DO_DUNG_MAY[r.chuaChay.lyDoDungMay] || {}).ten || '' : (r.chuaChay.tuMes ? 'theo PM ép nhựa' : 'QC báo')} ${dkGio(r.chuaChay.luc || 0)}</small>`;
         else tt = (now > (r.taoLuc || 0) + FAI_HAN_PHUT * 60000 && faiCa(r.date, r.ca))
             ? `<span class="badge bg-danger px-2 py-2">⏰ QUÁ HẠN (${dkGio((r.taoLuc || 0) + FAI_HAN_PHUT * 60000)})</span>`
             : '<span class="badge bg-warning text-dark px-2 py-2">⏳ Chờ kiểm</span>';
