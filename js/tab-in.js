@@ -285,6 +285,9 @@ function renderTabIn() {
     let st = (ae && focusP && ae.selectionStart != null) ? ae.selectionStart : null;
     // Giữ nguyên vị trí cuộn trang: vẽ lại (vd. sau khi bấm nút OK/NG) không được làm trang nhảy lên đầu.
     let scrollX = window.scrollX, scrollY = window.scrollY;
+    // Bảng rộng (vd. P4 QC đi kiểm) có vùng cuộn ngang riêng (.table-responsive) – vẽ lại cũng không được
+    // làm nó nhảy về cột đầu khi đang xem các cột bên phải (vd. đang ở hàng cuối, cột "Thử băng keo").
+    let tblScroll = Array.from(root.querySelectorAll('.table-responsive')).map(el => ({ left: el.scrollLeft, top: el.scrollTop }));
     inPendingRender = false;
     if (typeof dmSubscribe === 'function') dmSubscribe();
     let s = inSummary();
@@ -306,6 +309,7 @@ function renderTabIn() {
             dm: typeof dmRender === 'function' ? dmRender : inRenderTong, deco: typeof dmRenderDeco === 'function' ? dmRenderDeco : inRenderTong }[inSub] || inRenderTong)(s);
     } catch (e) { console.error(e); body = `<div class="alert alert-danger">Lỗi hiển thị: ${inEsc(e.message)}</div>`; }
     root.innerHTML = nav + `<div class="in-body">${body}</div>`;
+    root.querySelectorAll('.table-responsive').forEach((el, i) => { if (tblScroll[i]) { el.scrollLeft = tblScroll[i].left; el.scrollTop = tblScroll[i].top; } });
     if (focusP) {
         let el = root.querySelector(`[${focusP[0]}="${CSS.escape(focusP[1])}"]`);
         if (el) { try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); } try { if (st != null && el.setSelectionRange) el.setSelectionRange(st, st); } catch (e) { } }
