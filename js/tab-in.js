@@ -19,6 +19,8 @@ let inListenerPath = null;
 let inPendingRender = false;
 let inStarted = false;
 let inP4Truoc = null, inP4TruocPath = null;   // P4 của ca liền trước (để so mã hàng vòng đầu ca)
+let inAutoCaTimer = null;     // hẹn giờ tự kiểm tra đổi ca theo đồng hồ thực, để không bị kẹt ca cũ khi mở máy qua ca
+let inLastAutoCa = null;      // {date, ca} hệ thống tự gán gần nhất – nếu người dùng tự tay đổi khác đi thì thôi không can thiệp nữa
 
 const IN_RATIO_PVC = 1.2;     // nước = mực × 1,2 (nhựa PVC, nước T-11-3009)
 const IN_HAN_PHUT = 240;      // hạn dùng cốc mực: 4 giờ
@@ -60,6 +62,31 @@ function inDate() { return document.getElementById('inDate')?.value || getTodayI
 function inShift() { return document.getElementById('inShift')?.value || 'NGAY'; }
 function inBase() { return `qc_in_store_v1/${inDate()}/${inShift()}`; }
 function inDefaultShift() { let t = inToMin(inNowHM()); return (t >= 450 && t < 1170) ? 'NGAY' : 'DEM'; } // 07:30–19:30 = ca ngày
+// Ngày + ca đúng theo giờ thực tế hiện tại, theo đúng quy ước ca đêm = tính theo ngày hôm NÓ BẮT ĐẦU
+// (ca đêm 19:30 ngày X → 07:30 ngày X+1 vẫn ghi nhận là "ngày X", giống cách inCaTruoc() đang dùng).
+function inNgayCaHienTai() {
+    let now = new Date(), t = now.getHours() * 60 + now.getMinutes();
+    let d = new Date(now);
+    if (t < 450) d.setDate(d.getDate() - 1); // trước 07:30 -> vẫn là ca đêm của ngày hôm trước
+    let date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return { date, ca: (t >= 450 && t < 1170) ? 'NGAY' : 'DEM' };
+}
+// Mỗi phút kiểm tra: nếu ngày/ca đang chọn vẫn đúng bằng lần hệ thống tự gán gần nhất (tức người dùng
+// chưa tự tay đổi khác đi) mà giờ thực tế đã sang ca khác, thì tự chuyển theo – tránh trường hợp mở máy
+// để qua ca (vd. để qua đêm) mà QC không để ý đổi ca thủ công, dẫn đến ghi nhầm kết quả vào ca cũ.
+function inKiemDoiCaTuDong() {
+    if (!inStarted || !isEditMode) return;
+    let dEl = document.getElementById('inDate'), sEl = document.getElementById('inShift');
+    if (!dEl || !sEl || !inLastAutoCa) return;
+    if (dEl.value !== inLastAutoCa.date || sEl.value !== inLastAutoCa.ca) return; // người dùng đã tự đổi -> không can thiệp
+    let moi = inNgayCaHienTai();
+    if (moi.date === dEl.value && moi.ca === sEl.value) return;
+    dEl.value = moi.date; sEl.value = moi.ca;
+    inLastAutoCa = moi;
+    inListenerPath = null; // ép gắn lại đúng listener Firebase theo ngày/ca mới
+    inSubscribe();
+    inToast(`🔄 Đã tự chuyển sang ${moi.ca === 'NGAY' ? 'Ca Ngày' : 'Ca Đêm'} (${moi.date}) theo giờ hiện tại.`);
+}
 function inGet(path) { return path.split('/').reduce((o, k) => (o && o[k] !== undefined) ? o[k] : undefined, inData); }
 function inSetLocal(path, value) {
     let keys = path.split('/'), o = inData;
@@ -167,10 +194,15 @@ function inSummary() {
 // ===================== KHỞI ĐỘNG / LẮNG NGHE =====================
 function inKhoiDong() {
     let dEl = document.getElementById('inDate'), sEl = document.getElementById('inShift');
-    if (dEl && !dEl.value) dEl.value = getTodayISO();
-    if (sEl && !inStarted) sEl.value = inDefaultShift();
+    if (!inStarted) {
+        let auto = inNgayCaHienTai();
+        if (dEl && !dEl.value) dEl.value = auto.date;
+        if (sEl) sEl.value = auto.ca;
+        inLastAutoCa = { date: dEl ? dEl.value : auto.date, ca: sEl ? sEl.value : auto.ca };
+    }
     inStarted = true;
     inSubscribe();
+    if (!inAutoCaTimer) inAutoCaTimer = setInterval(inKiemDoiCaTuDong, 60000);
 }
 function inSubscribe() {
     if (typeof db === 'undefined' || !db || !isEditMode) { renderTabIn(); return; }
@@ -237,6 +269,8 @@ function inP4DoiMaHtml(dm) {
 function inStop() {
     if (inListenerPath && typeof db !== 'undefined' && db) db.ref(inListenerPath).off();
     inListenerPath = null; inData = {}; inStarted = false;
+    if (inAutoCaTimer) { clearInterval(inAutoCaTimer); inAutoCaTimer = null; }
+    inLastAutoCa = null;
     if (typeof dmStop === 'function') dmStop();
     let root = document.getElementById('inRoot'); if (root) root.innerHTML = '';
 }
