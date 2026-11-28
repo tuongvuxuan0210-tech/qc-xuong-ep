@@ -22,10 +22,11 @@ const DK_PATH_CHUAN = 'qc_dk_ep_chuan_v1';
 const DK_PATH_CHECK = 'qc_dk_ep_check_v1';
 const DK_PATH_NHAC = 'qc_nhac_v1';
 const DK_PATH_KHUON_TAY = 'qc_khuon_tay_v1';   // mã khuôn QC nhập tay khi PM ép nhựa chưa có kế hoạch: <date>/M<m>_<Ngay|Dem> = { mold, by, at }
+const DK_PATH_DUNG_MAY = 'qc_dk_dung_may_v1';  // QC tự báo máy đã dừng khi PM ép nhựa CHƯA kịp cập nhật trạng thái: <date>/M<m>_<Ngay|Dem> = { mold, luc, boi }
 let dkKhuonTay = {};
+let dkDungMay = {};
 const DK_HAN_PHUT = 30;          // hạn hoàn thành tính từ đầu ca / lúc đổi khuôn / đầu khung giờ / lúc chụp ảnh lỗi
 const DK_TICK_MS = 120000;       // chu kỳ kiểm tra của bộ nhắc
-const DK_HAN_2H_PHUT = 15;        // kiểm SP 2h: QC làm lúc nào trong khung cũng được -> chỉ nhắc khi HẾT khung + 15 phút vẫn chưa có kết quả (19/11 anh Tưởng)
 const DK_TIN_QUA_HAN_PHUT = 180;  // tin chờ quá lâu (máy gửi Zalo tắt) thì bỏ, không gửi muộn
 const DK_CAU_NOI_TRE_PHUT = 10;   // quá số phút này không thấy máy gửi Zalo -> cảnh báo trên Tab 6
 
@@ -139,11 +140,55 @@ function dkKhuonDangChay(date, m, ca) {
     let tay = dkKhuonTayCua(date, m, ca);
     return tay ? tay.mold : '';
 }
+// Đơn hàng của PM ép nhựa khớp với khuôn + máy này đã XONG (hết đơn hàng) hay TẠM DỪNG chưa?
+// Dùng để KHÔNG nhắc "điều kiện ép" / "kiểm 2 giờ/lần" khi máy đã dừng vì hết việc – không còn gì để kiểm.
+// Logic chọn đơn giống hệt faiDonHang() (Tab 7) để chọn đúng đơn đang gắn với máy này.
+function dkDonHangXongHoacDung(mold, m) {
+    if (typeof mesOrders === 'undefined' || !Array.isArray(mesOrders) || !mesOrders.length) return false;
+    let t = String(mold || '').trim().toLowerCase();
+    let ds = mesOrders.filter(o => o && String(o.moldId || '').trim().toLowerCase() === t);
+    if (!ds.length) return false;
+    let soMay = o => String(o.assignedMachine || '').replace(/\D/g, '');
+    let diem = o => (o.isCompleted ? 0 : 4) + (o.isPaused ? 0 : 2) + (soMay(o) === String(parseInt(m)) ? 1 : 0);
+    ds.sort((a, b) => diem(b) - diem(a) || String(b.startDate || '').localeCompare(String(a.startDate || '')));
+    let o = ds[0];
+    return !!(o && (o.isCompleted || o.isPaused));
+}
 // ---- Mã khuôn nhập tay (dùng khi PM ép nhựa chưa có dữ liệu của máy) ----
 function dkKhoaCaTay(m, ca) { return `M${parseInt(m)}_${String(ca).includes('Đêm') ? 'Dem' : 'Ngay'}`; }
 function dkKhuonTayCua(date, m, ca) {
     let r = (dkKhuonTay[date] || {})[dkKhoaCaTay(m, ca)];
     return r && r.mold ? r : null;
+}
+// ---- QC tự báo máy đã dừng (dùng khi PM ép nhựa CHƯA kịp cập nhật trạng thái nhưng thực tế máy đã dừng) ----
+// Khóa giống hệt khuôn nhập tay (M<m>_<Ngay|Dem>). Còn hiệu lực chỉ khi vẫn đúng mã khuôn lúc QC bấm báo dừng –
+// mã khuôn đổi (lô hàng mới) thì tự hết hiệu lực, không để sót việc quên bật lại mà bịt nhắc của lô sau.
+function dkDungMayHienTai(date, m, ca) {
+    let r = (dkDungMay[date] || {})[dkKhoaCaTay(m, ca)];
+    if (!r || !r.mold) return null;
+    let moldNay = dkKhuonDangChay(date, m, ca);
+    return (moldNay && r.mold === moldNay) ? r : null;
+}
+function dkBaoDungMay(date, m, ca) {
+    if (!checkAuthOrAlert() || !db) return;
+    if (typeof pqKiemMay === 'function') { let loi = pqKiemMay(m); if (loi) { alert(loi); return; } }
+    let mold = dkKhuonDangChay(date, m, ca);
+    if (!mold) { alert('⚠️ Máy này hiện không có mã khuôn đang chạy theo PM ép nhựa.'); return; }
+    let ai = (currentUser && currentUser.email) || '';
+    db.ref(`${DK_PATH_DUNG_MAY}/${date}/${dkKhoaCaTay(m, ca)}`).set({ mold, luc: Date.now(), boi: ai })
+        .catch(e => alert('❌ Không lưu được: ' + e.message));
+}
+function dkBaoMayChayLai(date, m, ca) {
+    if (!checkAuthOrAlert() || !db) return;
+    db.ref(`${DK_PATH_DUNG_MAY}/${date}/${dkKhoaCaTay(m, ca)}`).remove()
+        .catch(e => alert('❌ Không xóa được: ' + e.message));
+}
+function dkNgheDungMay() {
+    let tu = new Date(); tu.setDate(tu.getDate() - 7);
+    db.ref(DK_PATH_DUNG_MAY).orderByKey().startAt(dkISO(tu)).on('value', s => {
+        dkDungMay = s.val() || {};
+        if (typeof faiVeLaiTab2 === 'function') faiVeLaiTab2();
+    }, err => console.warn('Không đọc được dữ liệu QC báo dừng máy', err));
 }
 // Có dữ liệu từ PM ép nhựa không (không tính nhập tay)
 function dkCoKhuonPM(date, m, ca) {
@@ -305,6 +350,7 @@ function dkKhoiDong() {
         db.ref(DK_PATH_CHUAN).on('value', s => { dkChuan = s.val() || {}; dkRender(); },
             err => { dkNhacLoi = 'Chưa có quyền đọc nhánh ' + DK_PATH_CHUAN + ' (Firebase Rules)'; console.warn(err); dkRender(); });
         dkNgheKhuonTay();
+        dkNgheDungMay();
     }
     dkNgheCheck();
     if (!dkNhacTimer) {
@@ -315,11 +361,11 @@ function dkKhoiDong() {
 }
 function dkStop() {
     if (db) {
-        try { db.ref(DK_PATH_CHUAN).off(); db.ref(DK_PATH_KHUON_TAY).off(); } catch (e) {}
+        try { db.ref(DK_PATH_CHUAN).off(); db.ref(DK_PATH_KHUON_TAY).off(); db.ref(DK_PATH_DUNG_MAY).off(); } catch (e) {}
         if (dkCheckListener) { try { db.ref(`${DK_PATH_CHECK}/${dkCheckListener}`).off(); } catch (e) {} }
     }
     if (dkNhacTimer) { clearInterval(dkNhacTimer); dkNhacTimer = null; }
-    dkBound = false; dkCheckListener = null; dkChuan = {}; dkChecks = {}; dkNhacNgay = {}; dkKhuonTay = {};
+    dkBound = false; dkCheckListener = null; dkChuan = {}; dkChecks = {}; dkNhacNgay = {}; dkKhuonTay = {}; dkDungMay = {};
 }
 function dkNgheCheck() {
     if (!db || !isEditMode) return;
@@ -938,54 +984,13 @@ function dkApDungVit() {
 
 // ===================== 7. BỘ NHẮC VIỆC ZALO =====================
 // Xếp 1 tin vào hộp chờ gửi Zalo (máy Hải Tân AI Control sẽ lấy và gửi vào nhóm)
-function dk2hDaKiem(rec) { return !!(rec && (parseInt(rec.totalCheck) || 0) > 0); }
-
-function dkSoanTinNhac(p) {
-    let msg = p.dau;
-    if (p.dk && p.dk.length) msg += `\n🔧 Chưa xác nhận ĐIỀU KIỆN ÉP (quá ${DK_HAN_PHUT} phút):\n` + p.dk.join('\n');
-    if (p.h2 && p.h2.length) msg += `\n📋 Chưa kiểm SP định kỳ 2 giờ/lần (đã hết khung giờ):\n` + p.h2.join('\n');
-    if (p.m4 && p.m4.length) msg += `\n🚨 Có ảnh lỗi nhưng chưa có đối sách 4M:\n` + p.m4.join('\n');
-    return msg + `\n👉 QC vui lòng cập nhật ngay trên phần mềm QC.`;
-}
-
-// Ngay trước khi gửi (tin có thể nằm chờ lâu khi máy gửi Zalo tắt): bỏ các máy QC đã nhập kết quả kiểm 2h.
-// Trả về text mới, hoặc '' nếu không còn việc gì để nhắc.
-async function dkLamMoiTinNhac(t) {
-    let p = t && t.phan;
-    if (!p) {
-        // Tin do máy chưa cập nhật bản mới xếp (luật cũ: nhắc 2h ngay sau 30 phút đầu khung) -> bỏ phần 2h đó,
-        // máy gửi Zalo (bản mới) sẽ tự nhắc lại đúng luật khi hết khung mà vẫn chưa có kết quả.
-        let text = String((t && t.text) || '');
-        if (!text.includes('2 giờ/lần (quá')) return text;
-        let dong = text.split('\n'), ra = [], bo = false;
-        for (let d of dong) {
-            if (d.includes('2 giờ/lần (quá')) { bo = true; continue; }
-            if (bo && /^\s+•/.test(d)) continue;
-            bo = false; ra.push(d);
-        }
-        return /🔧|🚨/.test(ra.join('\n')) ? ra.join('\n') : '';
-    }
-    if (!Array.isArray(p.kiem2h) || !p.kiem2h.length) return t.text;
-    let cache = {}, h2 = [];
-    for (let g of p.kiem2h) {
-        if (!cache[g.date]) cache[g.date] = (await db.ref(`qc_tab2_store_v1/${g.date}`).once('value')).val() || {};
-        let con = (g.may || []).filter(x => !dk2hDaKiem(cache[g.date][x.k]));
-        if (con.length) h2.push(`  • ${g.nhan}: ${con.map(x => x.ten).join(', ')}`);
-    }
-    let q = Object.assign({}, p, { h2 });
-    if (!(q.dk || []).length && !h2.length && !(q.m4 || []).length) return '';
-    return dkSoanTinNhac(q).substring(0, 2500);
-}
-
-function dkXepTinZalo(maNhom, text, phan) {
+function dkXepTinZalo(maNhom, text) {
     let nhom = DK_NHOM_ZALO[maNhom];
     if (!nhom || !db) return Promise.reject(new Error('Thiếu nhóm Zalo'));
-    let tin = {
+    return db.ref(`${DK_PATH_NHAC}/${dkCaHienTai().date}/gui`).push({
         nhom: nhom.ma, tenNhom: nhom.nhom, text: String(text).substring(0, 2500), at: Date.now(),
         by: (currentUser && currentUser.email) || '', tt: 'cho', lan: 0
-    };
-    if (phan) tin.phan = JSON.parse(JSON.stringify(phan));
-    return db.ref(`${DK_PATH_NHAC}/${dkCaHienTai().date}/gui`).push(tin);
+    });
 }
 
 async function dkNhacGiuCho(date, id, now) {
@@ -1001,9 +1006,9 @@ async function dkNhacTick() {
     try {
         let now = Date.now(), ht = dkCaHienTai(new Date(now)), date = ht.date, ca = ht.ca;
         let doc = p => db.ref(p).once('value').then(s => s.val() || {});
-        let [nhac, checks, t1, t2, act] = await Promise.all([
+        let [nhac, checks, t1, t2, act, dungMay] = await Promise.all([
             doc(`${DK_PATH_NHAC}/${date}`), doc(`${DK_PATH_CHECK}/${date}`),
-            doc(`qc_tab1_store_v1/${date}`), doc(`qc_tab2_store_v1/${date}`), doc(`qc_tab3_actions_v1/${date}`)
+            doc(`qc_tab1_store_v1/${date}`), doc(`qc_tab2_store_v1/${date}`), doc(`qc_tab3_actions_v1/${date}`), doc(`${DK_PATH_DUNG_MAY}/${date}`)
         ]);
         if (!nhac.cur) nhac.cur = {};
         let log = nhac.log || {};
@@ -1012,25 +1017,22 @@ async function dkNhacTick() {
         let ungVien = [];   // { id, nhom, loai, dong }
 
         if (typeof mesSyncActive !== 'undefined' && mesSyncActive) {
-            // Khung kiểm 2h VỪA KẾT THÚC (khung đang chạy chưa tính: QC kiểm lúc nào trong khung cũng là đúng giờ).
-            // Khung đầu ca -> xét khung cuối của ca trước (vd 7h30-9h30 ca ngày -> xét 5h30-7h30 ca đêm hôm trước).
+            // Khung giờ kiểm 2h hiện tại
             let slots = ca === 'Ca Ngày' ? QC_SLOTS_DAY : QC_SLOTS_NIGHT;
             let idx = Math.min(slots.length - 1, Math.max(0, Math.floor((now - ht.batDau) / 7200000)));
-            let k2 = { date, ca, t2 };
-            if (idx >= 1) { k2.slot = slots[idx - 1]; k2.batDau = ht.batDau + (idx - 1) * 7200000; }
-            else {
-                let tr = dkCaHienTai(new Date(ht.batDau - 60000)), sl = tr.ca === 'Ca Ngày' ? QC_SLOTS_DAY : QC_SLOTS_NIGHT;
-                k2 = { date: tr.date, ca: tr.ca, slot: sl[sl.length - 1], batDau: tr.batDau + (sl.length - 1) * 7200000,
-                       t2: tr.date === date ? t2 : await doc(`qc_tab2_store_v1/${tr.date}`) };
-            }
-            let xet2h = now > k2.batDau + 7200000 + DK_HAN_2H_PHUT * 60000;
+            let slot = slots[idx], slotBatDau = ht.batDau + idx * 7200000;
             let thieu2h = { X1: [], X2: [] };
 
             for (let m = 1; m <= TOTAL_MACHINES; m++) {
                 let mold = dkKhuonDangChay(date, m, ca);
                 if (!mold) continue;
-                if (typeof faiDangChoChay === 'function' && faiDangChoChay(date, m, ca, mold)) continue;   // QC báo máy chưa chạy khuôn này
+                // Đơn hàng của khuôn này đã hết (hoàn thành) hoặc tạm dừng theo PM ép nhựa -> máy không còn
+                // chạy thật, không có gì để kiểm điều kiện ép / kiểm 2h -> bỏ qua, không nhắc Zalo.
+                if (dkDonHangXongHoacDung(mold, m)) continue;
                 let key = `M${m}_${ca}`, nhom = dkNhomTheoMay(m).ma;
+                // QC đã tự báo máy dừng (PM ép nhựa chưa kịp cập nhật trạng thái) cho đúng khuôn này -> bỏ qua.
+                let baoDung = dungMay[key];
+                if (baoDung && baoDung.mold === mold) continue;
                 let cur = nhac.cur[key];
                 if (!cur || cur.mold !== mold) {
                     // Lần đầu thấy trong ca -> tính hạn từ đầu ca; MES đổi sang khuôn khác -> tính hạn từ lúc này
@@ -1050,21 +1052,14 @@ async function dkNhacTick() {
                     if (!daNhac(id)) ungVien.push({ id, nhom, loai: 'dk',
                         dong: `  • ${dkTenMay(m)} – khuôn ${mold}` + (cur.prev ? ` (đổi khuôn lúc ${dkGio(cur.since)})` : '') + (dkLayChuan(mold, m) ? '' : (dkLayChuanGoc(mold, m) ? ` – 📋 chưa có bản riêng, kiểm theo bản gốc ${dkTenMay(dkLayChuanGoc(mold, m).m)} (kỹ thuật cần lập bản cho ${dkTenMay(m)})` : ' – ⚠️ chưa có bản điều kiện chuẩn')) });
                 }
-            }
-            // (b) Kiểm SP định kỳ 2 giờ/lần – khung vừa hết
-            if (xet2h) for (let m = 1; m <= TOTAL_MACHINES; m++) {
-                let mold2 = dkKhuonDangChay(k2.date, m, k2.ca);
-                if (!mold2) continue;
-                if (typeof faiDangChoChay === 'function') { if (typeof faiNghe === 'function') faiNghe(k2.date); if (faiDangChoChay(k2.date, m, k2.ca, mold2)) continue; }
-                let k = `M${m}_${k2.ca}_${k2.slot}`;
-                if (!dk2hDaKiem(k2.t2[k])) thieu2h[dkNhomTheoMay(m).ma].push({ ten: dkTenMay(m), k });
+                // (b) Kiểm SP định kỳ 2 giờ/lần
+                let rec2 = t2[`${key}_${slot}`];
+                if (!(rec2 && (parseInt(rec2.totalCheck) || 0) > 0) && now > slotBatDau + DK_HAN_PHUT * 60000) thieu2h[nhom].push(`${dkTenMay(m)}`);
             }
             ['X1', 'X2'].forEach(nhom => {
                 if (!thieu2h[nhom].length) return;
-                let id = `2H_${k2.date}_${k2.ca}_${k2.slot}_${nhom}`;
-                let nhan = `Khung ${getSlotRangeText(k2.slot)}` + (k2.date !== date || k2.ca !== ca ? ` (${k2.ca} ${dkNgayNgan(k2.date)})` : '');
-                if (!daNhac(id)) ungVien.push({ id, nhom, loai: 'h2', dong: `  • ${nhan}: ${thieu2h[nhom].map(x => x.ten).join(', ')}`,
-                    kiem: { date: k2.date, nhan, may: thieu2h[nhom] } });
+                let id = `2H_${ca}_${slot}_${nhom}`;
+                if (!daNhac(id)) ungVien.push({ id, nhom, loai: 'h2', dong: `  • Khung ${getSlotRangeText(slot)}: ${thieu2h[nhom].join(', ')}` });
             });
             dkNhacNgay = nhac;
         }
@@ -1091,13 +1086,17 @@ async function dkNhacTick() {
         });
 
         for (let u of ungVien) {
-            if (await dkNhacGiuCho(date, u.id, now)) { viec[u.nhom][u.loai].push(u.dong); if (u.kiem) (viec[u.nhom].kiem2h = viec[u.nhom].kiem2h || []).push(u.kiem); }
+            if (await dkNhacGiuCho(date, u.id, now)) viec[u.nhom][u.loai].push(u.dong);
         }
         for (let ma of ['X1', 'X2']) {
             let v = viec[ma], nhom = DK_NHOM_ZALO[ma];
             if (!v.dk.length && !v.h2.length && !v.m4.length) continue;
-            let phan = { dau: `⏰ [NHẮC VIỆC QC – ${nhom.xuong}]\n📅 ${dkNgayNgan(date)} · ${ca} · ${dkGio(now)}`, dk: v.dk, h2: v.h2, m4: v.m4, kiem2h: v.kiem2h || [] };
-            await dkXepTinZalo(ma, dkSoanTinNhac(phan), phan);
+            let msg = `⏰ [NHẮC VIỆC QC – ${nhom.xuong}]\n📅 ${dkNgayNgan(date)} · ${ca} · ${dkGio(now)}`;
+            if (v.dk.length) msg += `\n🔧 Chưa xác nhận ĐIỀU KIỆN ÉP (quá ${DK_HAN_PHUT} phút):\n` + v.dk.join('\n');
+            if (v.h2.length) msg += `\n📋 Chưa kiểm SP định kỳ 2 giờ/lần (quá ${DK_HAN_PHUT} phút):\n` + v.h2.join('\n');
+            if (v.m4.length) msg += `\n🚨 Có ảnh lỗi nhưng chưa có đối sách 4M:\n` + v.m4.join('\n');
+            msg += `\n👉 QC vui lòng cập nhật ngay trên phần mềm QC.`;
+            await dkXepTinZalo(ma, msg);
         }
         let cn = await doc(`${DK_PATH_NHAC}/cau_noi`);
         dkCauNoiLuc = cn.at || 0;
@@ -1150,11 +1149,7 @@ async function qcCauNoiChay(tenMay) {
                 if (!(c.tt === 'cho' || (c.tt === 'dang_gui' && now - (c.lay || 0) > 15 * 60000))) return undefined;
                 c.tt = 'dang_gui'; c.lay = now; return c;
             });
-            if (!r.committed) continue;
-            let text = t.text;
-            try { text = await dkLamMoiTinNhac(r.snapshot.val() || t); } catch (e) { text = t.text; }
-            if (!text) { await ref.update({ tt: 'het_viec', xongLuc: now }); continue; }   // QC đã làm xong trước khi gửi -> không gửi
-            tin.push({ date, id, nhom: t.nhom, tenNhom: t.tenNhom, text });
+            if (r.committed) tin.push({ date, id, nhom: t.nhom, tenNhom: t.tenNhom, text: t.text });
         }
     }
     await db.ref(`${DK_PATH_NHAC}/cau_noi`).set({ at: now, may: String(tenMay || 'AI Control').substring(0, 60) });

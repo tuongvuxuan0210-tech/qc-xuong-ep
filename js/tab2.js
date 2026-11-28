@@ -311,7 +311,13 @@
                         let inspectorCellHtml = '';
                         if (tIdx === 0) {
                             shiftCellHtml = `<td rowspan="${slots.length}" class="fw-bold"><div class="${shift === 'Ca Ngày' ? 'shift-icon-day' : 'shift-icon-night'}">${shiftIcon}<div style="font-size:10px; margin-top:2px; font-weight:700;">${shift}</div></div></td>`;
-                            inspectorCellHtml = `<td rowspan="${slots.length}"><input type="text" class="form-control form-control-sm text-center fw-bold t2-shift-inspector text-info" value="${escapeHtml(shiftInspector)}" placeholder="QC Ca" data-shiftkey="${shiftKey}" data-shift="${shift}" data-machine="${m}" data-workshop="${getMachineWorkshop(m)}" oninput="onTab2InspectorChange('${shift}', this.value, ${m})"></td>`;
+                            // QC tự báo máy đã dừng khi PM ép nhựa chưa kịp cập nhật trạng thái (xem dieu-kien-ep.js) –
+                            // còn hiệu lực chỉ khi vẫn đúng mã khuôn lúc QC bấm báo dừng.
+                            let dm = typeof dkDungMayHienTai === 'function' ? dkDungMayHienTai(date, m, shift) : null;
+                            let dungBtn = dm
+                                ? `<button type="button" class="btn btn-xs btn-outline-success rounded-pill mt-1 px-1 py-0 w-100" style="font-size:8.5px;" title="QC báo dừng lúc ${dkGio(dm.luc || 0)}${dm.boi ? ' – ' + escapeHtml(dm.boi) : ''}. Bấm để báo máy đã chạy lại." onclick="dkBaoMayChayLai('${date}', ${m}, '${shift}')">✅ Đã báo dừng<br>bấm để chạy lại</button>`
+                                : `<button type="button" class="btn btn-xs btn-outline-danger rounded-pill mt-1 px-1 py-0 w-100" style="font-size:8.5px;" title="Dùng khi PM ép nhựa CHƯA cập nhật trạng thái nhưng máy thực tế đã dừng – tạm ngừng nhắc Zalo (điều kiện ép + kiểm 2h) cho máy này đến khi đổi mã khuôn hoặc bấm chạy lại." onclick="dkBaoDungMay('${date}', ${m}, '${shift}')">🛑 Báo máy dừng</button>`;
+                            inspectorCellHtml = `<td rowspan="${slots.length}"><input type="text" class="form-control form-control-sm text-center fw-bold t2-shift-inspector text-info" value="${escapeHtml(shiftInspector)}" placeholder="QC Ca" data-shiftkey="${shiftKey}" data-shift="${shift}" data-machine="${m}" data-workshop="${getMachineWorkshop(m)}" oninput="onTab2InspectorChange('${shift}', this.value, ${m})">${dungBtn}</td>`;
                         }
 
                         let tr = document.createElement('tr');
